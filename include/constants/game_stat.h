@@ -55,7 +55,21 @@
 #define GAME_STAT_PLAYED_BERRY_CRUSH          51
 #define GAME_STAT_DEXNAV_SCANNED              52
 
-#define NUM_USED_GAME_STATS                   53
+// Game Corner Minigame Stats
+#define GAME_STAT_SNAKE_HIGH_SCORE            53
+#define GAME_STAT_SNAKE_PLAYS                 54
+#define GAME_STAT_FLAPPYBIRD_HIGH_SCORE       55
+#define GAME_STAT_FLAPPYBIRD_PLAYS            56
+#define GAME_STAT_BLACKJACK_HIGH_SCORE        57
+#define GAME_STAT_BLACKJACK_WINS              58
+#define GAME_STAT_VOLTORB_FLIP_HIGH_SCORE     59
+#define GAME_STAT_VOLTORB_FLIP_PLAYS          60
+#define GAME_STAT_GACHA_PLAYS                 61
+#define GAME_STAT_PACHINKO_HIGH_SCORE         62
+#define GAME_STAT_BLOCK_STACKER_HIGH_SCORE    63
+// Note: Indices 64+ would require expanding NUM_GAME_STATS
+
+#define NUM_USED_GAME_STATS                   64
 #define NUM_GAME_STATS                        64
 
 #endif // GUARD_CONSTANTS_GAME_STAT_H

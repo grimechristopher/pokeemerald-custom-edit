@@ -59,6 +59,18 @@
 #define FLAG_UNUSED_0x02D    0x2D // Unused Flag
 #define FLAG_UNUSED_0x02E    0x2E // Unused Flag
 #define FLAG_UNUSED_0x02F    0x2F // Unused Flag
+
+// Game Corner Minigame Unlock Flags
+#define FLAG_UNLOCKED_GAMECORNER_SNAKE          0x020  // Snake minigame unlocked
+#define FLAG_UNLOCKED_GAMECORNER_FLAPPYBIRD     0x021  // Flappy Bird minigame unlocked
+#define FLAG_UNLOCKED_GAMECORNER_BLACKJACK      0x022  // Blackjack minigame unlocked
+#define FLAG_UNLOCKED_GAMECORNER_VOLTORB_FLIP   0x023  // Voltorb Flip minigame unlocked
+#define FLAG_UNLOCKED_GAMECORNER_GACHA          0x024  // Gacha minigame unlocked
+#define FLAG_UNLOCKED_GAMECORNER_PACHINKO       0x025  // Pachinko minigame unlocked
+#define FLAG_UNLOCKED_GAMECORNER_BLOCK_STACKER  0x026  // Block Stacker minigame unlocked
+#define FLAG_UNLOCKED_GAMECORNER_PINBALL        0x027  // Pinball minigame unlocked
+#define FLAG_UNLOCKED_GAMECORNER_DERBY          0x028  // Derby minigame unlocked
+#define FLAG_VISITED_MOSSDEEP_GAME_CORNER       0x029  // Visited Mossdeep Game Corner (for first-time tutorial)
 #define FLAG_UNUSED_0x030    0x30 // Unused Flag
 #define FLAG_UNUSED_0x031    0x31 // Unused Flag
 #define FLAG_UNUSED_0x032    0x32 // Unused Flag
