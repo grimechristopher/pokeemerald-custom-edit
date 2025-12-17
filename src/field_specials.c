@@ -17,6 +17,7 @@
 #include "field_screen_effect.h"
 #include "field_specials.h"
 #include "field_weather.h"
+#include "game_corner_common.h"
 #include "graphics.h"
 #include "international_string_util.h"
 #include "item.h"
@@ -4380,4 +4381,16 @@ void SetAbility(void)
 {
     u32 ability = gSpecialVar_Result;
     SetMonData(&gPlayerParty[gSpecialVar_0x8004], MON_DATA_ABILITY_NUM, &ability);
+}
+
+// ========================================
+// Game Corner Minigames
+// ========================================
+
+void Special_PlaySnake(void)
+{
+    if (!B_GAMECORNER_SNAKE)
+        return;
+
+    GameCorner_InitMinigame(MINIGAME_SNAKE);
 }

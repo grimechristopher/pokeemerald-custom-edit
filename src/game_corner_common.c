@@ -50,9 +50,10 @@ static const u8 sText_NewHighScore[] = _("NEW HIGH SCORE!\n");
 // ========================================
 
 // Forward declarations (will be implemented when each minigame is ported)
-static void Snake_Init(void);
-static void Snake_Main(void);
-static void Snake_Exit(void);
+// Snake - implemented in game_corner_snake.c
+extern void Snake_Init(void);
+extern void Snake_Main(void);
+extern void Snake_Exit(void);
 static void FlappyBird_Init(void);
 static void FlappyBird_Main(void);
 static void FlappyBird_Exit(void);
@@ -164,9 +165,6 @@ const struct MinigameMetadata gMinigameRegistry[MINIGAME_COUNT] = {
 };
 
 // Placeholder implementations (will be replaced when porting each minigame)
-static void Snake_Init(void) {}
-static void Snake_Main(void) {}
-static void Snake_Exit(void) {}
 static void FlappyBird_Init(void) {}
 static void FlappyBird_Main(void) {}
 static void FlappyBird_Exit(void) {}
