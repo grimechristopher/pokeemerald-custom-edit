@@ -1,6 +1,7 @@
 #ifndef GUARD_GAME_CORNER_COMMON_H
 #define GUARD_GAME_CORNER_COMMON_H
 
+#include "global.h"
 #include "constants/game_stat.h"
 #include "constants/flags.h"
 

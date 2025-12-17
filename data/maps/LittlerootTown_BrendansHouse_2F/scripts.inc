@@ -263,7 +263,12 @@ LittlerootTown_BrendansHouse_2F_EventScript_CheckRivalsPC::
 	end
 
 PlayersHouse_2F_EventScript_Notebook::
-	msgbox PlayersHouse_2F_Text_Notebook, MSGBOX_SIGN
+	msgbox PlayersHouse_2F_Text_Notebook, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, YES, PlayersHouse_2F_EventScript_PlayFlappyBird
+	end
+
+PlayersHouse_2F_EventScript_PlayFlappyBird::
+	special Special_PlayFlappyBird
 	end
 
 PlayersHouse_2F_EventScript_GameCube::

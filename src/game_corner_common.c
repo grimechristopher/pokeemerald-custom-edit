@@ -54,9 +54,10 @@ static const u8 sText_NewHighScore[] = _("NEW HIGH SCORE!\n");
 extern void Snake_Init(void);
 extern void Snake_Main(void);
 extern void Snake_Exit(void);
-static void FlappyBird_Init(void);
-static void FlappyBird_Main(void);
-static void FlappyBird_Exit(void);
+// Flappy Bird - implemented in game_corner_flappybird.c
+extern void FlappyBird_Init(void);
+extern void FlappyBird_Main(void);
+extern void FlappyBird_Exit(void);
 static void Blackjack_Init(void);
 static void Blackjack_Main(void);
 static void Blackjack_Exit(void);
@@ -165,9 +166,6 @@ const struct MinigameMetadata gMinigameRegistry[MINIGAME_COUNT] = {
 };
 
 // Placeholder implementations (will be replaced when porting each minigame)
-static void FlappyBird_Init(void) {}
-static void FlappyBird_Main(void) {}
-static void FlappyBird_Exit(void) {}
 static void Blackjack_Init(void) {}
 static void Blackjack_Main(void) {}
 static void Blackjack_Exit(void) {}

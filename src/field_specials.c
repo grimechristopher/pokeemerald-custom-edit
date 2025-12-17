@@ -4394,3 +4394,11 @@ void Special_PlaySnake(void)
 
     GameCorner_InitMinigame(MINIGAME_SNAKE);
 }
+
+void Special_PlayFlappyBird(void)
+{
+    if (!B_GAMECORNER_FLAPPYBIRD)
+        return;
+
+    GameCorner_InitMinigame(MINIGAME_FLAPPYBIRD);
+}
