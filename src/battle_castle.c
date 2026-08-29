@@ -39,3 +39,12 @@ u32 CalculateCastlePoints(const struct CastleMonResult mons[FRONTIER_PARTY_SIZE]
 
     return points;
 }
+
+bool8 CastleShop_TrySpend(u32 *cp, u32 cost)
+{
+    if (*cp < cost)
+        return FALSE;
+
+    *cp -= cost;
+    return TRUE;
+}

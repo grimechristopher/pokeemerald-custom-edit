@@ -21,4 +21,6 @@ struct CastleMonResult
 // doesn't use), or this would score a nonexistent 4th party slot.
 u32 CalculateCastlePoints(const struct CastleMonResult mons[FRONTIER_PARTY_SIZE], u32 totalPPUsed, u32 opponentLevelsRaised);
 
+bool8 CastleShop_TrySpend(u32 *cp, u32 cost);
+
 #endif // GUARD_BATTLE_CASTLE_H

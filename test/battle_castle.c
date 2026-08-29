@@ -46,3 +46,22 @@ TEST("CalculateCastlePoints adds 7 CP per 5 levels the opponent was raised, capp
     // Any more would exceed 50 and must clamp
     EXPECT_EQ(CalculateCastlePoints(mons, 0, 20), 50);
 }
+
+TEST("CastleShop_TrySpend deducts CP only when affordable")
+{
+    u32 cp = 20;
+
+    EXPECT(CastleShop_TrySpend(&cp, CASTLE_COST_SCOUT_SPECIES));
+    EXPECT_EQ(cp, 19);
+
+    EXPECT(CastleShop_TrySpend(&cp, CASTLE_COST_HEAL_FULL));
+    EXPECT_EQ(cp, 19 - CASTLE_COST_HEAL_FULL);
+}
+
+TEST("CastleShop_TrySpend refuses to go negative")
+{
+    u32 cp = 2;
+
+    EXPECT(!CastleShop_TrySpend(&cp, CASTLE_COST_HEAL_FULL));
+    EXPECT_EQ(cp, 2); // unchanged
+}
