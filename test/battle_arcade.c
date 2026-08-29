@@ -121,3 +121,42 @@ TEST("Arcade_ApplyPanelEffect swaps the player and opponent parties")
     EXPECT_EQ(GetMonData(&gPlayerParty[0], MON_DATA_SPECIES, NULL), SPECIES_WYNAUT);
     EXPECT_EQ(GetMonData(&gEnemyParty[0], MON_DATA_SPECIES, NULL), SPECIES_WOBBUFFET);
 }
+
+TEST("Arcade_RecordBattleResult raises performance score on a win and wraps the battle number")
+{
+    u8 i;
+
+    Arcade_StartRound();
+    EXPECT_EQ(Arcade_GetBattleNumber(), 1);
+
+    for (i = 0; i < ARCADE_ROUND_LENGTH; i++)
+        Arcade_RecordBattleResult(TRUE);
+
+    EXPECT_EQ(Arcade_GetBattleNumber(), 1); // wrapped back to the start of a new round
+}
+
+TEST("Arcade_RecordBattleResult floors performance score at 0, never wrapping a u8 below zero")
+{
+    u8 i;
+
+    Arcade_StartRound(); // score starts at 50
+
+    // 20 consecutive losses is far more than enough to hit 0 (5 losses would do it: 50 - 5*10 = 0)
+    for (i = 0; i < 20; i++)
+        Arcade_RecordBattleResult(FALSE);
+
+    EXPECT_EQ(Arcade_GetPerformanceScore(), 0);
+}
+
+TEST("Arcade_RecordBattleResult caps performance score at 100")
+{
+    u8 i;
+
+    Arcade_StartRound(); // score starts at 50
+
+    // 20 consecutive wins is far more than enough to hit 100 (5 wins would do it: 50 + 5*10 = 100)
+    for (i = 0; i < 20; i++)
+        Arcade_RecordBattleResult(TRUE);
+
+    EXPECT_EQ(Arcade_GetPerformanceScore(), 100);
+}

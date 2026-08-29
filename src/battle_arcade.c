@@ -199,3 +199,38 @@ void Arcade_ApplyPanelEffect(enum ArcadePanelEffect effect)
         break;
     }
 }
+
+static EWRAM_DATA u8 sPerformanceScore = 0;
+static EWRAM_DATA u8 sBattleNumber = 0; // 0-6, internal; externally reported as 1-7
+
+void Arcade_StartRound(void)
+{
+    sPerformanceScore = 50; // start neutral
+    sBattleNumber = 0;
+}
+
+enum ArcadePanelEffect Arcade_RollPanelForNextBattle(void)
+{
+    return Arcade_ChoosePanel(sPerformanceScore);
+}
+
+void Arcade_RecordBattleResult(bool8 won)
+{
+    if (won && sPerformanceScore < 100)
+        sPerformanceScore += 10;
+    else if (!won && sPerformanceScore >= 10)
+        sPerformanceScore -= 10;
+    sBattleNumber++;
+    if (sBattleNumber >= ARCADE_ROUND_LENGTH)
+        sBattleNumber = 0;
+}
+
+u8 Arcade_GetBattleNumber(void)
+{
+    return sBattleNumber + 1;
+}
+
+u8 Arcade_GetPerformanceScore(void)
+{
+    return sPerformanceScore;
+}

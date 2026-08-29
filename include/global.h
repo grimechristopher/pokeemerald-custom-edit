@@ -524,6 +524,9 @@ struct BattleFrontier
     /*0xEFA*/ u8 unused_EFA;
     /*0xEFB*/ u8 unused_EFB;
     /*0xEFC*/ struct DomeMonData domePlayerPartyData[FRONTIER_PARTY_SIZE];
+    /*New*/ u16 arcadeWinStreaks[FRONTIER_LVL_MODE_COUNT];
+    /*New*/ u16 arcadeRecordWinStreaks[FRONTIER_LVL_MODE_COUNT];
+    /*New*/ u16 arcadePrize;
 };
 
 struct ApprenticeQuestion

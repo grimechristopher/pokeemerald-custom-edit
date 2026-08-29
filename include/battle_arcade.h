@@ -38,5 +38,10 @@ enum ArcadePanelEffect Arcade_PickPanelInBucket(u8 roll, bool8 favorable);
 enum ArcadePanelEffect Arcade_ChoosePanel(u8 performanceScore);
 bool8 Arcade_PanelSkipsBattle(enum ArcadePanelEffect effect);
 void Arcade_ApplyPanelEffect(enum ArcadePanelEffect effect);
+void Arcade_StartRound(void);
+enum ArcadePanelEffect Arcade_RollPanelForNextBattle(void);
+void Arcade_RecordBattleResult(bool8 won);
+u8 Arcade_GetBattleNumber(void);
+u8 Arcade_GetPerformanceScore(void); // exposed so callers can drive UI feedback and so its clamping is directly testable
 
 #endif // GUARD_BATTLE_ARCADE_H
