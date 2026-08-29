@@ -9,6 +9,7 @@
 //AND OTHER RHH POKEEMERALD-EXPANSION CONTRIBUTORS
 #include "global.h"
 #include "battle.h"
+#include "battle_arcade.h"
 #include "battle_setup.h"
 #include "berry.h"
 #include "clock.h"
@@ -281,6 +282,8 @@ static void DebugAction_Party_HealParty(u8 taskId);
 static void DebugAction_Party_ClearParty(u8 taskId);
 static void DebugAction_Party_SetParty(u8 taskId);
 static void DebugAction_Party_BattleSingle(u8 taskId);
+
+static void DebugAction_BattleFrontier_ArcadeRound(u8 taskId);
 
 static void DebugAction_FlagsVars_Flags(u8 taskId);
 static void DebugAction_FlagsVars_FlagsSelect(u8 taskId);
@@ -592,6 +595,12 @@ static const struct DebugMenuOption sDebugMenu_Actions_Party[] =
     { NULL }
 };
 
+static const struct DebugMenuOption sDebugMenu_Actions_BattleFrontier[] =
+{
+    { COMPOUND_STRING("Start Arcade Round"), DebugAction_BattleFrontier_ArcadeRound },
+    { NULL }
+};
+
 static const struct DebugMenuOption sDebugMenu_Actions_Give[] =
 {
     { COMPOUND_STRING("Give item XYZ…"),    DebugAction_Give_Item },
@@ -676,6 +685,7 @@ static const struct DebugMenuOption sDebugMenu_Actions_Main[] =
     { COMPOUND_STRING("Utilities…"),    DebugAction_OpenSubMenu, sDebugMenu_Actions_Utilities, },
     { COMPOUND_STRING("PC/Bag…"),       DebugAction_OpenSubMenu, sDebugMenu_Actions_PCBag, },
     { COMPOUND_STRING("Party…"),        DebugAction_OpenSubMenu, sDebugMenu_Actions_Party, },
+    { COMPOUND_STRING("Battle Frontier…"), DebugAction_OpenSubMenu, sDebugMenu_Actions_BattleFrontier, },
     { COMPOUND_STRING("Give X…"),       DebugAction_OpenSubMenu, sDebugMenu_Actions_Give, },
     { COMPOUND_STRING("Player…"),       DebugAction_OpenSubMenu, sDebugMenu_Actions_Player, },
     { COMPOUND_STRING("Scripts…"),      DebugAction_OpenSubMenu, sDebugMenu_Actions_Scripts, },
@@ -4174,6 +4184,34 @@ static void DebugAction_Party_BattleSingle(u8 taskId)
     ZeroEnemyPartyMons();
     CreateNPCTrainerPartyFromTrainer(gPlayerParty, &sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_PLAYER], TRUE, BATTLE_TYPE_TRAINER);
     CreateNPCTrainerPartyFromTrainer(gEnemyParty, GetDebugAiTrainer(), FALSE, BATTLE_TYPE_TRAINER);
+
+    gBattleTypeFlags = BATTLE_TYPE_TRAINER;
+    gDebugAIFlags = sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_AI].aiFlags;
+    gIsDebugBattle = TRUE;
+    gBattleEnvironment = BattleSetup_GetEnvironmentId();
+    CalculateEnemyPartyCount();
+    BattleSetup_StartTrainerBattle_Debug();
+    Debug_DestroyMenu_Full(taskId);
+}
+
+static void DebugAction_BattleFrontier_ArcadeRound(u8 taskId)
+{
+    enum ArcadePanelEffect panel;
+
+    ZeroPlayerPartyMons();
+    ZeroEnemyPartyMons();
+    CreateNPCTrainerPartyFromTrainer(gPlayerParty, &sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_PLAYER], TRUE, BATTLE_TYPE_TRAINER);
+    CreateNPCTrainerPartyFromTrainer(gEnemyParty, GetDebugAiTrainer(), FALSE, BATTLE_TYPE_TRAINER);
+
+    Arcade_StartRound();
+    panel = Arcade_RollPanelForNextBattle();
+    Arcade_ApplyPanelEffect(panel);
+
+    if (Arcade_PanelSkipsBattle(panel))
+    {
+        Debug_DestroyMenu_Full(taskId);
+        return;
+    }
 
     gBattleTypeFlags = BATTLE_TYPE_TRAINER;
     gDebugAIFlags = sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_AI].aiFlags;
