@@ -3691,10 +3691,27 @@ static inline bool32 SetStartingSideStatus(u32 flag, u32 side, u32 message, u32 
     return FALSE;
 }
 
+static inline bool32 SetStartingBattleWeather(u32 weatherFlag, u32 multistringChooser, u32 anim)
+{
+    if (!(gBattleWeather & weatherFlag))
+    {
+        gBattleWeather = weatherFlag;
+        gBattleCommunication[MULTISTRING_CHOOSER] = multistringChooser;
+        gBattleScripting.animArg1 = anim;
+        // 0 = infinite, same convention as SetStartingFieldStatus's timer. weatherDuration is u8, so clamp
+        // rather than silently truncate if a hack ever configures an absurdly large starting timer.
+        gWishFutureKnock.weatherDuration = min(gBattleStruct->startingStatusTimer, 0xFF);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 bool32 TryFieldEffects(enum FieldEffectCases caseId)
 {
     bool32 effect = FALSE;
     bool32 isTerrain = FALSE;
+    bool32 isWeather = FALSE;
 
     if (gBattleTypeFlags & BATTLE_TYPE_SAFARI)
         return FALSE;
@@ -3823,11 +3840,36 @@ bool32 TryFieldEffects(enum FieldEffectCases caseId)
                         B_ANIM_SWAMP,
                         &gSideTimers[B_SIDE_OPPONENT].swampTimer);
             break;
+        case STARTING_STATUS_WEATHER_SUN:
+            effect = SetStartingBattleWeather(B_WEATHER_SUN_NORMAL, WEATHER_DROUGHT, B_ANIM_SUN_CONTINUES);
+            isWeather = TRUE;
+            break;
+        case STARTING_STATUS_WEATHER_RAIN:
+            effect = SetStartingBattleWeather(B_WEATHER_RAIN_NORMAL, WEATHER_RAIN, B_ANIM_RAIN_CONTINUES);
+            isWeather = TRUE;
+            break;
+        case STARTING_STATUS_WEATHER_SANDSTORM:
+            effect = SetStartingBattleWeather(B_WEATHER_SANDSTORM, WEATHER_SANDSTORM, B_ANIM_SANDSTORM_CONTINUES);
+            isWeather = TRUE;
+            break;
+        case STARTING_STATUS_WEATHER_HAIL:
+            if (B_OVERWORLD_SNOW >= GEN_9)
+                effect = SetStartingBattleWeather(B_WEATHER_SNOW, WEATHER_SNOW, B_ANIM_SNOW_CONTINUES);
+            else
+                effect = SetStartingBattleWeather(B_WEATHER_HAIL, WEATHER_SNOW, B_ANIM_HAIL_CONTINUES);
+            isWeather = TRUE;
+            break;
+        case STARTING_STATUS_WEATHER_FOG:
+            effect = SetStartingBattleWeather(B_WEATHER_FOG, WEATHER_FOG_HORIZONTAL, B_ANIM_FOG_CONTINUES);
+            isWeather = TRUE;
+            break;
         }
         if (effect)
         {
             if (isTerrain)
                 BattleScriptPushCursorAndCallback(BattleScript_OverworldTerrain);
+            else if (isWeather)
+                BattleScriptPushCursorAndCallback(BattleScript_OverworldWeatherStarts);
             else
                 BattleScriptPushCursorAndCallback(BattleScript_OverworldStatusStarts);
         }
