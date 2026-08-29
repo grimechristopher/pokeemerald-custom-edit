@@ -30,3 +30,44 @@ TEST("GetSpeciesBST sums all six base stats")
                   + GetSpeciesBaseStat(SPECIES_WOBBUFFET, STAT_SPDEF);
     EXPECT_EQ(bst, expected);
 }
+
+TEST("GetNthHallEligibleSpecies only returns species of the requested type, not banned")
+{
+    u32 count = CountHallEligibleSpecies(TYPE_WATER, HALL_MAX_RANK);
+    u32 i;
+
+    EXPECT(count > 0);
+
+    for (i = 0; i < count && i < 20; i++)
+    {
+        u16 species = GetNthHallEligibleSpecies(TYPE_WATER, HALL_MAX_RANK, i);
+        bool8 isWaterType = (gSpeciesInfo[species].types[0] == TYPE_WATER
+                           || gSpeciesInfo[species].types[1] == TYPE_WATER);
+        EXPECT(isWaterType);
+        EXPECT(!(gSpeciesInfo[species].isFrontierBanned));
+    }
+}
+
+TEST("CountHallEligibleSpecies shrinks as rank drops (fewer high-BST mons unlocked)")
+{
+    u32 countAtMaxRank = CountHallEligibleSpecies(TYPE_NORMAL, HALL_MAX_RANK);
+    u32 countAtRank1 = CountHallEligibleSpecies(TYPE_NORMAL, HALL_MIN_RANK);
+
+    // Strictly less-than (not <=): the source games' Normal-type roster has enough high-BST
+    // members gated behind higher ranks that this must be a real decrease, not just a tie —
+    // a `<=` here would pass even if rank-gating regressed into a no-op.
+    EXPECT(countAtRank1 < countAtMaxRank);
+}
+
+TEST("GetHallOpponentSpecies always returns a species matching the requested type")
+{
+    u32 i;
+
+    for (i = 0; i < 20; i++)
+    {
+        u16 species = GetHallOpponentSpecies(TYPE_FIRE, HALL_MAX_RANK);
+        bool8 isFireType = (gSpeciesInfo[species].types[0] == TYPE_FIRE
+                          || gSpeciesInfo[species].types[1] == TYPE_FIRE);
+        EXPECT(isFireType);
+    }
+}
