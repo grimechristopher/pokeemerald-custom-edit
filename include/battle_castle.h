@@ -27,4 +27,10 @@ void GetCastleMonResults(struct Pokemon party[FRONTIER_PARTY_SIZE], struct Castl
 
 bool8 CastleShop_TrySpend(u32 *cp, u32 cost);
 
+void Castle_StartChallenge(void);
+u32 Castle_GetCurrentCP(void);
+bool8 Castle_TrySpendCP(u32 cost);
+void Castle_ApplyBattleResult(bool8 won, struct Pokemon party[FRONTIER_PARTY_SIZE], u32 totalPPUsed, u32 opponentLevelsRaised);
+u16 Castle_GetWinStreak(u8 lvlMode);
+
 #endif // GUARD_BATTLE_CASTLE_H

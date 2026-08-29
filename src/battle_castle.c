@@ -1,6 +1,10 @@
 #include "global.h"
 #include "battle_castle.h"
 #include "pokemon.h"
+#include "constants/battle_frontier.h"
+
+static EWRAM_DATA u32 sCurrentCP = 0;
+static EWRAM_DATA u16 sCurrentStreak = 0;
 
 u32 CalculateCastlePoints(const struct CastleMonResult mons[FRONTIER_PARTY_SIZE], u32 totalPPUsed, u32 opponentLevelsRaised)
 {
@@ -63,4 +67,45 @@ bool8 CastleShop_TrySpend(u32 *cp, u32 cost)
 
     *cp -= cost;
     return TRUE;
+}
+
+void Castle_StartChallenge(void)
+{
+    sCurrentCP = CASTLE_STARTING_CP;
+    sCurrentStreak = 0;
+}
+
+u32 Castle_GetCurrentCP(void)
+{
+    return sCurrentCP;
+}
+
+bool8 Castle_TrySpendCP(u32 cost)
+{
+    return CastleShop_TrySpend(&sCurrentCP, cost);
+}
+
+void Castle_ApplyBattleResult(bool8 won, struct Pokemon party[FRONTIER_PARTY_SIZE], u32 totalPPUsed, u32 opponentLevelsRaised)
+{
+    struct CastleMonResult results[FRONTIER_PARTY_SIZE];
+
+    if (!won)
+    {
+        sCurrentCP = CASTLE_STARTING_CP;
+        sCurrentStreak = 0;
+        return;
+    }
+
+    GetCastleMonResults(party, results);
+    sCurrentCP += CalculateCastlePoints(results, totalPPUsed, opponentLevelsRaised);
+    sCurrentStreak++;
+    if (sCurrentStreak > gSaveBlock2Ptr->frontier.castleWinStreaks[FRONTIER_LVL_50])
+        gSaveBlock2Ptr->frontier.castleWinStreaks[FRONTIER_LVL_50] = sCurrentStreak;
+    if (sCurrentStreak > gSaveBlock2Ptr->frontier.castleRecordWinStreaks[FRONTIER_LVL_50])
+        gSaveBlock2Ptr->frontier.castleRecordWinStreaks[FRONTIER_LVL_50] = sCurrentStreak;
+}
+
+u16 Castle_GetWinStreak(u8 lvlMode)
+{
+    return gSaveBlock2Ptr->frontier.castleWinStreaks[lvlMode];
 }

@@ -97,3 +97,59 @@ TEST("GetCastleMonResults reads fainted state, HP percent, and status from a par
     EXPECT(!results[2].fainted);
     EXPECT(results[2].hasStatus);
 }
+
+#include "event_data.h"
+#include "constants/battle_frontier.h"
+
+TEST("Castle_StartChallenge resets session CP to CASTLE_STARTING_CP")
+{
+    Castle_StartChallenge();
+    EXPECT_EQ(Castle_GetCurrentCP(), CASTLE_STARTING_CP);
+}
+
+TEST("Castle_TrySpendCP spends from the session CP set up by Castle_StartChallenge")
+{
+    Castle_StartChallenge();
+
+    EXPECT(Castle_TrySpendCP(CASTLE_COST_SCOUT_SPECIES));
+    EXPECT_EQ(Castle_GetCurrentCP(), CASTLE_STARTING_CP - CASTLE_COST_SCOUT_SPECIES);
+}
+
+TEST("Castle_ApplyBattleResult resets CP and streak to starting values on a loss")
+{
+    struct Pokemon party[FRONTIER_PARTY_SIZE];
+    u32 i;
+
+    for (i = 0; i < FRONTIER_PARTY_SIZE; i++)
+        CreateMon(&party[i], SPECIES_WOBBUFFET, 50, 0, FALSE, 0, OT_ID_PLAYER_ID, 0);
+
+    Castle_StartChallenge();
+    Castle_TrySpendCP(CASTLE_COST_SCOUT_SPECIES); // spend some CP so the reset is observable
+
+    Castle_ApplyBattleResult(FALSE, party, 0, 0);
+
+    EXPECT_EQ(Castle_GetCurrentCP(), CASTLE_STARTING_CP);
+}
+
+TEST("Castle_ApplyBattleResult adds CalculateCastlePoints' result to CP and raises the win streak/record on a win")
+{
+    struct Pokemon party[FRONTIER_PARTY_SIZE];
+    u32 i;
+    u16 streakBefore;
+
+    for (i = 0; i < FRONTIER_PARTY_SIZE; i++)
+        CreateMon(&party[i], SPECIES_WOBBUFFET, 50, 0, FALSE, 0, OT_ID_PLAYER_ID, 0);
+
+    gSaveBlock2Ptr->frontier.castleWinStreaks[FRONTIER_LVL_50] = 0;
+    gSaveBlock2Ptr->frontier.castleRecordWinStreaks[FRONTIER_LVL_50] = 0;
+    streakBefore = gSaveBlock2Ptr->frontier.castleWinStreaks[FRONTIER_LVL_50];
+
+    Castle_StartChallenge();
+    // Full-HP, unfainted, status-free party with 0 PP used, 0 levels raised: CalculateCastlePoints == 29 (see above).
+    Castle_ApplyBattleResult(TRUE, party, 0, 0);
+
+    EXPECT_EQ(Castle_GetCurrentCP(), CASTLE_STARTING_CP + 29);
+    EXPECT_EQ(gSaveBlock2Ptr->frontier.castleWinStreaks[FRONTIER_LVL_50], streakBefore + 1);
+    EXPECT_EQ(gSaveBlock2Ptr->frontier.castleRecordWinStreaks[FRONTIER_LVL_50], streakBefore + 1);
+    EXPECT_EQ(Castle_GetWinStreak(FRONTIER_LVL_50), streakBefore + 1);
+}

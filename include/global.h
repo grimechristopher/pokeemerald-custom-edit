@@ -527,6 +527,9 @@ struct BattleFrontier
     /*New*/ u16 arcadeWinStreaks[FRONTIER_LVL_MODE_COUNT];
     /*New*/ u16 arcadeRecordWinStreaks[FRONTIER_LVL_MODE_COUNT];
     /*New*/ u16 arcadePrize;
+    /*New*/ u16 castleWinStreaks[FRONTIER_LVL_MODE_COUNT];
+    /*New*/ u16 castleRecordWinStreaks[FRONTIER_LVL_MODE_COUNT];
+    /*New*/ u16 castlePrize;
 };
 
 struct ApprenticeQuestion
