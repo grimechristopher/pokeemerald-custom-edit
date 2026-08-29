@@ -1,5 +1,6 @@
 #include "global.h"
 #include "battle_castle.h"
+#include "pokemon.h"
 
 u32 CalculateCastlePoints(const struct CastleMonResult mons[FRONTIER_PARTY_SIZE], u32 totalPPUsed, u32 opponentLevelsRaised)
 {
@@ -38,6 +39,21 @@ u32 CalculateCastlePoints(const struct CastleMonResult mons[FRONTIER_PARTY_SIZE]
         points = 50;
 
     return points;
+}
+
+void GetCastleMonResults(struct Pokemon party[FRONTIER_PARTY_SIZE], struct CastleMonResult results[FRONTIER_PARTY_SIZE])
+{
+    u32 i;
+
+    for (i = 0; i < FRONTIER_PARTY_SIZE; i++)
+    {
+        u32 hp = GetMonData(&party[i], MON_DATA_HP, NULL);
+        u32 maxHp = GetMonData(&party[i], MON_DATA_MAX_HP, NULL);
+
+        results[i].fainted = (hp == 0);
+        results[i].hpPercent = maxHp == 0 ? 0 : (hp * 100) / maxHp;
+        results[i].hasStatus = (GetMonData(&party[i], MON_DATA_STATUS, NULL) != 0);
+    }
 }
 
 bool8 CastleShop_TrySpend(u32 *cp, u32 cost)

@@ -65,3 +65,35 @@ TEST("CastleShop_TrySpend refuses to go negative")
     EXPECT(!CastleShop_TrySpend(&cp, CASTLE_COST_HEAL_FULL));
     EXPECT_EQ(cp, 2); // unchanged
 }
+
+#include "pokemon.h"
+#include "constants/battle.h"
+
+TEST("GetCastleMonResults reads fainted state, HP percent, and status from a party")
+{
+    struct CastleMonResult results[FRONTIER_PARTY_SIZE];
+    struct Pokemon party[FRONTIER_PARTY_SIZE];
+    u32 i;
+    u32 hp;
+    u32 status;
+
+    for (i = 0; i < FRONTIER_PARTY_SIZE; i++)
+        CreateMon(&party[i], SPECIES_WOBBUFFET, 50, 0, FALSE, 0, OT_ID_PLAYER_ID, 0);
+
+    hp = 0;
+    SetMonData(&party[0], MON_DATA_HP, &hp); // faint mon 0
+
+    status = STATUS1_POISON;
+    SetMonData(&party[2], MON_DATA_STATUS, &status); // poison mon 2
+
+    GetCastleMonResults(party, results);
+
+    EXPECT(results[0].fainted);
+    EXPECT_EQ(results[0].hpPercent, 0);
+    EXPECT(!results[0].hasStatus);
+    EXPECT(!results[1].fainted);
+    EXPECT_EQ(results[1].hpPercent, 100);
+    EXPECT(!results[1].hasStatus);
+    EXPECT(!results[2].fainted);
+    EXPECT(results[2].hasStatus);
+}

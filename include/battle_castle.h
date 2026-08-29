@@ -21,6 +21,10 @@ struct CastleMonResult
 // doesn't use), or this would score a nonexistent 4th party slot.
 u32 CalculateCastlePoints(const struct CastleMonResult mons[FRONTIER_PARTY_SIZE], u32 totalPPUsed, u32 opponentLevelsRaised);
 
+// Not const: matches GetMonData's own non-const struct Pokemon * signature (the codebase's
+// established idiom — no sibling Frontier facility uses a const-qualified party parameter).
+void GetCastleMonResults(struct Pokemon party[FRONTIER_PARTY_SIZE], struct CastleMonResult results[FRONTIER_PARTY_SIZE]);
+
 bool8 CastleShop_TrySpend(u32 *cp, u32 cost);
 
 #endif // GUARD_BATTLE_CASTLE_H
