@@ -4222,6 +4222,7 @@ static void DebugAction_BattleFrontier_ArcadeRound(u8 taskId)
     gBattleTypeFlags = BATTLE_TYPE_TRAINER;
     gDebugAIFlags = sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_AI].aiFlags;
     gIsDebugBattle = TRUE;
+    gIsDebugArcadeBattle = TRUE;
     gBattleEnvironment = BattleSetup_GetEnvironmentId();
     CalculateEnemyPartyCount();
     BattleSetup_StartTrainerBattle_Debug();

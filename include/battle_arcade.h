@@ -44,4 +44,9 @@ void Arcade_RecordBattleResult(bool8 won);
 u8 Arcade_GetBattleNumber(void);
 u8 Arcade_GetPerformanceScore(void); // exposed so callers can drive UI feedback and so its clamping is directly testable
 
+// Mirrors gIsDebugCastleBattle/gDebugHallBattleType: gates the CB2_EndTrainerBattle hook so a
+// debug Arcade battle's result reaches Arcade_RecordBattleResult, keeping the round/streak
+// tracking reachable from real play instead of only from tests.
+extern bool8 gIsDebugArcadeBattle;
+
 #endif // GUARD_BATTLE_ARCADE_H

@@ -203,6 +203,8 @@ void Arcade_ApplyPanelEffect(enum ArcadePanelEffect effect)
 static EWRAM_DATA u8 sPerformanceScore = 0;
 static EWRAM_DATA u8 sBattleNumber = 0; // 0-6, internal; externally reported as 1-7
 
+EWRAM_DATA bool8 gIsDebugArcadeBattle = FALSE;
+
 void Arcade_StartRound(void)
 {
     sPerformanceScore = 50; // start neutral

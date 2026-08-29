@@ -1,6 +1,7 @@
 #include "global.h"
 #include "battle.h"
 #include "load_save.h"
+#include "battle_arcade.h"
 #include "battle_castle.h"
 #include "battle_hall.h"
 #include "battle_setup.h"
@@ -1305,6 +1306,12 @@ static void HandleBattleVariantEndParty(void)
 
 static void CB2_EndTrainerBattle(void)
 {
+    if (gIsDebugArcadeBattle)
+    {
+        Arcade_RecordBattleResult(gBattleOutcome == B_OUTCOME_WON);
+        gIsDebugArcadeBattle = FALSE;
+    }
+
     if (gIsDebugCastleBattle)
     {
         Castle_ApplyBattleResult(gBattleOutcome == B_OUTCOME_WON, gPlayerParty, 0, 0);
