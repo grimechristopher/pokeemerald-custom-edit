@@ -1,6 +1,12 @@
 #include "global.h"
 #include "battle_arcade.h"
 #include "random.h"
+#include "pokemon.h"
+#include "event_data.h"
+#include "constants/battle.h"
+#include "constants/items.h"
+#include "constants/battle_frontier.h"
+#include "tv.h"
 
 static const enum ArcadePanelEffect sArcadeFavorablePanels[ARCADE_PANEL_COUNT_FAVORABLE] =
 {
@@ -66,7 +72,130 @@ bool8 Arcade_PanelSkipsBattle(enum ArcadePanelEffect effect)
     return effect == ARCADE_EFFECT_SKIP_BATTLE;
 }
 
+static void CutHp(struct Pokemon *mon)
+{
+    u32 maxHp = GetMonData(mon, MON_DATA_MAX_HP, NULL);
+    u32 newHp = (maxHp * 80) / 100;
+    if (newHp < 1)
+        newHp = 1;
+    SetMonData(mon, MON_DATA_HP, &newHp);
+}
+
+static void InflictStatus(struct Pokemon *mon, u32 status)
+{
+    SetMonData(mon, MON_DATA_STATUS, &status);
+}
+
+static void SetStartingStatus(u32 status, u32 timer)
+{
+    VarSet(B_VAR_STARTING_STATUS, status);
+    VarSet(B_VAR_STARTING_STATUS_TIMER, timer);
+}
+
+static void SwapTeams(void)
+{
+    struct Pokemon temp[FRONTIER_PARTY_SIZE];
+    memcpy(temp, gPlayerParty, sizeof(temp));
+    memcpy(gPlayerParty, gEnemyParty, sizeof(temp));
+    memcpy(gEnemyParty, temp, sizeof(temp));
+}
+
+static void RaiseLevel(struct Pokemon *mon)
+{
+    u8 level = GetMonData(mon, MON_DATA_LEVEL, NULL);
+    level += 3;
+    if (level > FRONTIER_MAX_LEVEL_50)
+        level = FRONTIER_MAX_LEVEL_50;
+    SetMonData(mon, MON_DATA_LEVEL, &level);
+    CalculateMonStats(mon);
+}
+
+// Mirrors the increment+clamp+daily-tracking pattern used by GiveBattlePoints (frontier_util.c),
+// and the same MAX_BATTLE_FRONTIER_POINTS clamp used by GiveFrontierBattlePoints (field_specials.c).
+static void GiveArcadeBattlePoints(u16 amount)
+{
+    u32 points = gSaveBlock2Ptr->frontier.battlePoints + amount;
+    if (points > MAX_BATTLE_FRONTIER_POINTS)
+        points = MAX_BATTLE_FRONTIER_POINTS;
+    gSaveBlock2Ptr->frontier.battlePoints = points;
+    IncrementDailyBattlePoints(amount);
+}
+
 void Arcade_ApplyPanelEffect(enum ArcadePanelEffect effect)
 {
-    // TODO(Task 4): apply the panel's effect to the battle state. Intentionally empty stub.
+    u16 item;
+
+    switch (effect)
+    {
+    case ARCADE_EFFECT_NONE:
+    case ARCADE_EFFECT_SKIP_BATTLE:
+        break;
+    case ARCADE_EFFECT_CUT_HP_PLAYER:
+        CutHp(&gPlayerParty[0]);
+        break;
+    case ARCADE_EFFECT_CUT_HP_OPPONENT:
+        CutHp(&gEnemyParty[0]);
+        break;
+    case ARCADE_EFFECT_POISON_PLAYER:
+        InflictStatus(&gPlayerParty[0], STATUS1_POISON);
+        break;
+    case ARCADE_EFFECT_POISON_OPPONENT:
+        InflictStatus(&gEnemyParty[0], STATUS1_POISON);
+        break;
+    case ARCADE_EFFECT_PARALYZE_PLAYER:
+        InflictStatus(&gPlayerParty[0], STATUS1_PARALYSIS);
+        break;
+    case ARCADE_EFFECT_PARALYZE_OPPONENT:
+        InflictStatus(&gEnemyParty[0], STATUS1_PARALYSIS);
+        break;
+    case ARCADE_EFFECT_BURN_PLAYER:
+        InflictStatus(&gPlayerParty[0], STATUS1_BURN);
+        break;
+    case ARCADE_EFFECT_BURN_OPPONENT:
+        InflictStatus(&gEnemyParty[0], STATUS1_BURN);
+        break;
+    case ARCADE_EFFECT_SLEEP_PLAYER:
+        InflictStatus(&gPlayerParty[0], STATUS1_SLEEP_TURN(3));
+        break;
+    case ARCADE_EFFECT_SLEEP_OPPONENT:
+        InflictStatus(&gEnemyParty[0], STATUS1_SLEEP_TURN(3));
+        break;
+    case ARCADE_EFFECT_FREEZE_PLAYER:
+        InflictStatus(&gPlayerParty[0], STATUS1_FREEZE);
+        break;
+    case ARCADE_EFFECT_FREEZE_OPPONENT:
+        InflictStatus(&gEnemyParty[0], STATUS1_FREEZE);
+        break;
+    case ARCADE_EFFECT_GIVE_ITEM_PLAYER:
+        item = ITEM_SITRUS_BERRY;
+        SetMonData(&gPlayerParty[0], MON_DATA_HELD_ITEM, &item);
+        break;
+    case ARCADE_EFFECT_RAISE_LEVEL_PLAYER:
+        RaiseLevel(&gPlayerParty[0]);
+        break;
+    case ARCADE_EFFECT_WEATHER_SUN:
+        SetStartingStatus(STARTING_STATUS_WEATHER_SUN, 0);
+        break;
+    case ARCADE_EFFECT_WEATHER_RAIN:
+        SetStartingStatus(STARTING_STATUS_WEATHER_RAIN, 0);
+        break;
+    case ARCADE_EFFECT_WEATHER_SANDSTORM:
+        SetStartingStatus(STARTING_STATUS_WEATHER_SANDSTORM, 0);
+        break;
+    case ARCADE_EFFECT_WEATHER_HAIL:
+        SetStartingStatus(STARTING_STATUS_WEATHER_HAIL, 0);
+        break;
+    case ARCADE_EFFECT_TRICK_ROOM:
+        SetStartingStatus(STARTING_STATUS_TRICK_ROOM, 5);
+        break;
+    case ARCADE_EFFECT_TEAM_SWAP:
+        SwapTeams();
+        break;
+    case ARCADE_EFFECT_GIVE_BP_1:
+        GiveArcadeBattlePoints(1);
+        break;
+    case ARCADE_EFFECT_GIVE_BP_3:
+        GiveArcadeBattlePoints(3);
+        break;
+    }
 }
