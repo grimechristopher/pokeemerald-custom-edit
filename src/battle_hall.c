@@ -23,6 +23,8 @@ static const struct HallBstBracket sHallBstBrackets[] =
 
 #define HALL_BST_BRACKET_COUNT (sizeof(sHallBstBrackets) / sizeof(sHallBstBrackets[0]))
 
+EWRAM_DATA enum Type gDebugHallBattleType = TYPE_NONE;
+
 bool8 IsBstAvailableAtRank(u32 bst, u8 rank)
 {
     u32 i;

@@ -11,6 +11,7 @@
 #include "battle.h"
 #include "battle_arcade.h"
 #include "battle_castle.h"
+#include "battle_hall.h"
 #include "battle_setup.h"
 #include "berry.h"
 #include "clock.h"
@@ -286,6 +287,7 @@ static void DebugAction_Party_BattleSingle(u8 taskId);
 
 static void DebugAction_BattleFrontier_ArcadeRound(u8 taskId);
 static void DebugAction_BattleFrontier_CastleBattle(u8 taskId);
+static void DebugAction_BattleFrontier_HallBattle(u8 taskId);
 
 static void DebugAction_FlagsVars_Flags(u8 taskId);
 static void DebugAction_FlagsVars_FlagsSelect(u8 taskId);
@@ -601,6 +603,7 @@ static const struct DebugMenuOption sDebugMenu_Actions_BattleFrontier[] =
 {
     { COMPOUND_STRING("Start Arcade Round"), DebugAction_BattleFrontier_ArcadeRound },
     { COMPOUND_STRING("Start Castle Battle"), DebugAction_BattleFrontier_CastleBattle },
+    { COMPOUND_STRING("Start Hall Battle (Normal type)"), DebugAction_BattleFrontier_HallBattle },
     { NULL }
 };
 
@@ -4238,6 +4241,37 @@ static void DebugAction_BattleFrontier_CastleBattle(u8 taskId)
     gDebugAIFlags = sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_AI].aiFlags;
     gIsDebugBattle = TRUE;
     gIsDebugCastleBattle = TRUE;
+    gBattleEnvironment = BattleSetup_GetEnvironmentId();
+    CalculateEnemyPartyCount();
+    BattleSetup_StartTrainerBattle_Debug();
+    Debug_DestroyMenu_Full(taskId);
+}
+
+static void DebugAction_BattleFrontier_HallBattle(u8 taskId)
+{
+    enum Type type = TYPE_NORMAL; // fixed for this one-tap debug entry; a type-picker submenu is future work
+    u8 rank;
+    u16 species;
+    u8 level;
+
+    ZeroPlayerPartyMons();
+    ZeroEnemyPartyMons();
+    CreateNPCTrainerPartyFromTrainer(gPlayerParty, &sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_PLAYER], TRUE, BATTLE_TYPE_TRAINER);
+
+    rank = Hall_GetTypeRank(type);
+    species = GetHallOpponentSpecies(type, rank);
+    if (species == SPECIES_NONE)
+    {
+        Debug_DestroyMenu_Full(taskId);
+        return;
+    }
+    level = GetMonData(&gPlayerParty[0], MON_DATA_LEVEL, NULL);
+    CreateMon(&gEnemyParty[0], species, level, 0, FALSE, 0, OT_ID_PLAYER_ID, 0);
+
+    gBattleTypeFlags = BATTLE_TYPE_TRAINER;
+    gDebugAIFlags = sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_AI].aiFlags;
+    gIsDebugBattle = TRUE;
+    gDebugHallBattleType = type;
     gBattleEnvironment = BattleSetup_GetEnvironmentId();
     CalculateEnemyPartyCount();
     BattleSetup_StartTrainerBattle_Debug();
