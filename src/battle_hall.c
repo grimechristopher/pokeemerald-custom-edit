@@ -2,6 +2,7 @@
 #include "battle_hall.h"
 #include "pokemon.h"
 #include "random.h"
+#include "event_data.h"
 
 struct HallBstBracket
 {
@@ -99,4 +100,20 @@ u16 GetHallOpponentSpecies(enum Type type, u8 rank)
         return SPECIES_NONE;
 
     return GetNthHallEligibleSpecies(type, rank, Random() % count);
+}
+
+u8 Hall_GetTypeRank(enum Type type)
+{
+    u8 rank = gSaveBlock2Ptr->frontier.hallTypeRanks[type];
+    return rank == 0 ? HALL_MIN_RANK : rank;
+}
+
+void Hall_RecordBattleResult(enum Type type, bool8 won)
+{
+    u8 rank = Hall_GetTypeRank(type);
+
+    if (won && rank < HALL_MAX_RANK)
+        rank++;
+
+    gSaveBlock2Ptr->frontier.hallTypeRanks[type] = rank;
 }

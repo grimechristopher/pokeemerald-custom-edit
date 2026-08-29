@@ -530,6 +530,7 @@ struct BattleFrontier
     /*New*/ u16 castleWinStreaks[FRONTIER_LVL_MODE_COUNT];
     /*New*/ u16 castleRecordWinStreaks[FRONTIER_LVL_MODE_COUNT];
     /*New*/ u16 castlePrize;
+    /*New*/ u8 hallTypeRanks[NUMBER_OF_MON_TYPES];
 };
 
 struct ApprenticeQuestion

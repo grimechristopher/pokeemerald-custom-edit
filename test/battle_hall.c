@@ -1,6 +1,7 @@
 #include "global.h"
 #include "test/test.h"
 #include "battle_hall.h"
+#include "event_data.h"
 
 TEST("IsBstAvailableAtRank gates species by base stat total and rank")
 {
@@ -70,4 +71,27 @@ TEST("GetHallOpponentSpecies always returns a species matching the requested typ
                           || gSpeciesInfo[species].types[1] == TYPE_FIRE);
         EXPECT(isFireType);
     }
+}
+
+TEST("Hall_GetTypeRank defaults to Rank 1 and Hall_RecordBattleResult advances it on a win")
+{
+    gSaveBlock2Ptr->frontier.hallTypeRanks[TYPE_GRASS] = 0; // simulate an unset save field
+    EXPECT_EQ(Hall_GetTypeRank(TYPE_GRASS), HALL_MIN_RANK);
+
+    Hall_RecordBattleResult(TYPE_GRASS, TRUE);
+    EXPECT_EQ(Hall_GetTypeRank(TYPE_GRASS), HALL_MIN_RANK + 1);
+
+    Hall_RecordBattleResult(TYPE_GRASS, FALSE);
+    EXPECT_EQ(Hall_GetTypeRank(TYPE_GRASS), HALL_MIN_RANK + 1); // a loss doesn't roll rank back
+}
+
+TEST("Hall_GetTypeRank never exceeds HALL_MAX_RANK")
+{
+    u32 i;
+
+    gSaveBlock2Ptr->frontier.hallTypeRanks[TYPE_WATER] = HALL_MAX_RANK;
+    for (i = 0; i < 5; i++)
+        Hall_RecordBattleResult(TYPE_WATER, TRUE);
+
+    EXPECT_EQ(Hall_GetTypeRank(TYPE_WATER), HALL_MAX_RANK);
 }

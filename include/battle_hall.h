@@ -9,5 +9,7 @@ u32 GetSpeciesBST(u16 species);
 u16 GetHallOpponentSpecies(enum Type type, u8 rank);
 u32 CountHallEligibleSpecies(enum Type type, u8 rank);
 u16 GetNthHallEligibleSpecies(enum Type type, u8 rank, u32 n);
+u8 Hall_GetTypeRank(enum Type type);
+void Hall_RecordBattleResult(enum Type type, bool8 won);
 
 #endif // GUARD_BATTLE_HALL_H
