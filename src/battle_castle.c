@@ -6,6 +6,8 @@
 static EWRAM_DATA u32 sCurrentCP = 0;
 static EWRAM_DATA u16 sCurrentStreak = 0;
 
+EWRAM_DATA bool8 gIsDebugCastleBattle = FALSE;
+
 u32 CalculateCastlePoints(const struct CastleMonResult mons[FRONTIER_PARTY_SIZE], u32 totalPPUsed, u32 opponentLevelsRaised)
 {
     u32 i;

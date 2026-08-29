@@ -10,6 +10,7 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_arcade.h"
+#include "battle_castle.h"
 #include "battle_setup.h"
 #include "berry.h"
 #include "clock.h"
@@ -284,6 +285,7 @@ static void DebugAction_Party_SetParty(u8 taskId);
 static void DebugAction_Party_BattleSingle(u8 taskId);
 
 static void DebugAction_BattleFrontier_ArcadeRound(u8 taskId);
+static void DebugAction_BattleFrontier_CastleBattle(u8 taskId);
 
 static void DebugAction_FlagsVars_Flags(u8 taskId);
 static void DebugAction_FlagsVars_FlagsSelect(u8 taskId);
@@ -598,6 +600,7 @@ static const struct DebugMenuOption sDebugMenu_Actions_Party[] =
 static const struct DebugMenuOption sDebugMenu_Actions_BattleFrontier[] =
 {
     { COMPOUND_STRING("Start Arcade Round"), DebugAction_BattleFrontier_ArcadeRound },
+    { COMPOUND_STRING("Start Castle Battle"), DebugAction_BattleFrontier_CastleBattle },
     { NULL }
 };
 
@@ -4216,6 +4219,25 @@ static void DebugAction_BattleFrontier_ArcadeRound(u8 taskId)
     gBattleTypeFlags = BATTLE_TYPE_TRAINER;
     gDebugAIFlags = sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_AI].aiFlags;
     gIsDebugBattle = TRUE;
+    gBattleEnvironment = BattleSetup_GetEnvironmentId();
+    CalculateEnemyPartyCount();
+    BattleSetup_StartTrainerBattle_Debug();
+    Debug_DestroyMenu_Full(taskId);
+}
+
+static void DebugAction_BattleFrontier_CastleBattle(u8 taskId)
+{
+    ZeroPlayerPartyMons();
+    ZeroEnemyPartyMons();
+    CreateNPCTrainerPartyFromTrainer(gPlayerParty, &sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_PLAYER], TRUE, BATTLE_TYPE_TRAINER);
+    CreateNPCTrainerPartyFromTrainer(gEnemyParty, GetDebugAiTrainer(), FALSE, BATTLE_TYPE_TRAINER);
+
+    Castle_StartChallenge();
+
+    gBattleTypeFlags = BATTLE_TYPE_TRAINER;
+    gDebugAIFlags = sDebugTrainers[DIFFICULTY_NORMAL][DEBUG_TRAINER_AI].aiFlags;
+    gIsDebugBattle = TRUE;
+    gIsDebugCastleBattle = TRUE;
     gBattleEnvironment = BattleSetup_GetEnvironmentId();
     CalculateEnemyPartyCount();
     BattleSetup_StartTrainerBattle_Debug();
