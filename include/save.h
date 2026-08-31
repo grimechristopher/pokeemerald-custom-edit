@@ -29,7 +29,9 @@
 #define SECTOR_ID_HOF_2              63
 #define SECTOR_ID_TRAINER_HILL       64
 #define SECTOR_ID_RECORDED_BATTLE    65
-#define SECTORS_COUNT                66    // 62 save + 4 special sectors (62 sectors/~248 KB reclaimed from the dropped backup slot)
+#define SECTOR_ID_RECORDED_BATTLE_2  66    // struct RecordedBattleSave outgrew one sector once
+                                            // struct Pokemon started growing - see recorded_battle.c
+#define SECTORS_COUNT                67    // 62 save + 5 special sectors (62 sectors/~248 KB reclaimed from the dropped backup slot)
 
 #define NUM_HOF_SECTORS 2
 

@@ -38,6 +38,12 @@ struct RecordedBattleSave
     u32 checksum;
 };
 
+// How many flash sectors sizeof(struct RecordedBattleSave) needs, rounded up.
+// Kept as a real constant (not inlined at each call site) so RecordedBattleToSave/
+// TryCopyRecordedBattleSaveData below and the STATIC_ASSERT in recorded_battle.c
+// can't drift out of sync with each other.
+#define RECORDED_BATTLE_SAVE_SECTORS 2
+
 enum
 {
     RECORDED_BYTE, // Generic.

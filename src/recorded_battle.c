@@ -31,7 +31,7 @@ struct PlayerInfo
 };
 
 // Save data using TryWriteSpecialSaveSector is allowed to exceed SECTOR_DATA_SIZE (up to the counter field)
-STATIC_ASSERT(sizeof(struct RecordedBattleSave) <= SECTOR_COUNTER_OFFSET, RecordedBattleSaveFreeSpace);
+STATIC_ASSERT(sizeof(struct RecordedBattleSave) <= RECORDED_BATTLE_SAVE_SECTORS * SECTOR_COUNTER_OFFSET, RecordedBattleSaveFreeSpace);
 
 EWRAM_DATA rng_value_t gRecordedBattleRngSeed = RNG_VALUE_EMPTY;
 EWRAM_DATA rng_value_t gBattlePalaceMoveSelectionRngValue = RNG_VALUE_EMPTY;
@@ -272,15 +272,18 @@ static bool32 IsRecordedBattleSaveValid(struct RecordedBattleSave *save)
 
 static bool32 RecordedBattleToSave(struct RecordedBattleSave *battleSave, struct RecordedBattleSave *saveSector)
 {
-    memset(saveSector, 0, SECTOR_SIZE);
+    memset(saveSector, 0, RECORDED_BATTLE_SAVE_SECTORS * SECTOR_SIZE);
     memcpy(saveSector, battleSave, sizeof(*battleSave));
 
     saveSector->checksum = CalcByteArraySum((void *)(saveSector), sizeof(*saveSector) - 4);
 
-    if (TryWriteSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE, (void *)(saveSector)) != SAVE_STATUS_OK)
+    // TryWriteSpecialSaveSector always writes SECTOR_COUNTER_OFFSET bytes starting at
+    // its src pointer, one sector at a time - chunk the struct across both sector IDs.
+    if (TryWriteSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE, (u8 *)(saveSector)) != SAVE_STATUS_OK)
         return FALSE;
-    else
-        return TRUE;
+    if (TryWriteSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE_2, (u8 *)(saveSector) + SECTOR_COUNTER_OFFSET) != SAVE_STATUS_OK)
+        return FALSE;
+    return TRUE;
 }
 
 bool32 MoveRecordedBattleToSaveData(void)
@@ -292,7 +295,7 @@ bool32 MoveRecordedBattleToSaveData(void)
 
     saveAttempts = 0;
     battleSave = AllocZeroed(sizeof(struct RecordedBattleSave));
-    savSection = AllocZeroed(SECTOR_SIZE);
+    savSection = AllocZeroed(RECORDED_BATTLE_SAVE_SECTORS * SECTOR_SIZE);
 
     memcpy(battleSave->parties, gParties, sizeof(struct Pokemon[MAX_BATTLE_TRAINERS][PARTY_SIZE]));
 
@@ -445,8 +448,11 @@ static bool32 TryCopyRecordedBattleSaveData(struct RecordedBattleSave *dst, stru
 {
     if (TryReadSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE, (void *)(saveBuffer)) != SAVE_STATUS_OK)
         return FALSE;
+    memcpy(dst, saveBuffer, SECTOR_COUNTER_OFFSET);
 
-    memcpy(dst, saveBuffer, sizeof(struct RecordedBattleSave));
+    if (TryReadSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE_2, (void *)(saveBuffer)) != SAVE_STATUS_OK)
+        return FALSE;
+    memcpy((u8 *)dst + SECTOR_COUNTER_OFFSET, saveBuffer, sizeof(struct RecordedBattleSave) - SECTOR_COUNTER_OFFSET);
 
     if (!IsRecordedBattleSaveValid(dst))
         return FALSE;
