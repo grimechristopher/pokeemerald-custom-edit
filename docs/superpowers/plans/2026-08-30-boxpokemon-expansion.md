@@ -22,9 +22,11 @@
 | `include/constants/vars.h` | `VARS_START`/`VARS_END` — widen the persisted var count. |
 | `include/pokemon.h` | `struct BoxPokemon`, `struct PokemonSubstruct0/3/4`, `enum MonData`, `enum Ribbon`, `MAX_RIBBONS_PER_MON`, new accessor prototypes. |
 | `src/pokemon.c` | `GetSubstruct4()`, `GetMonData`/`SetMonData`/`GetBoxMonData`/`SetBoxMonData` cases for every new field, `BoxMonHasRibbon`/`GiveBoxMonRibbon`/`HasMonRibbon`/`GiveMonRibbon`. |
-| `include/save.h` | Sector id constants — resized for the new `BoxPokemon` size at 72 boxes. |
-| `src/save.c` | `sSaveSlotLayout[]` — extended `SAVEBLOCK_CHUNK(struct PokemonStorage, N)` entries. |
+| `include/save.h` | Sector id constants — resized for `RecordedBattleSave` (Task 2) and the new `BoxPokemon` size at 72 boxes (Task 9). |
+| `include/recorded_battle.h` / `src/recorded_battle.c` | `RECORDED_BATTLE_SAVE_SECTORS`, and the read/write functions chunked across 2 sectors instead of 1 — unrelated to `BoxPokemon` itself, but blocks every task after it until fixed (Task 2). |
+| `src/save.c` | `sSaveSlotLayout[]` — extended `SAVEBLOCK_CHUNK(struct PokemonStorage, N)` entries (Task 9). |
 | `test/pokemon.c` | One `TEST()` per new field/behavior, plus one full-struct size assertion. |
+| `test/save.c` | Save-compatibility size-regression guards (`T_SAVEBLOCK1_SIZE` etc.) — every task that resizes a save struct must update the matching guard here. |
 
 ---
 
@@ -38,7 +40,7 @@ Discovered while establishing a clean baseline before Task 1: `test/pokemon.c` d
 - `"BoxPokemon raw layout is independent of personality and OT ID"` called `CreateMon(&monA, SPECIES_WOBBUFFET, 50, 0, TRUE, 0x11111111, OT_ID_PRESET, 0x22222222)` — an 8-argument call matching an old `CreateMon` signature. The current one is `void CreateMon(struct Pokemon *mon, enum Species species, u8 level, u32 personality, struct OriginalTrainerId);` (5 args). First fix attempt used plain `CreateMon` with the corrected argument shape — this compiled but then *failed at runtime* (`EXPECT_EQ(-17, 0)` on the `memcmp`), because plain `CreateMon` rolls random IVs per call (confirmed via `USE_RANDOM_IVS` in `src/pokemon.c`), so `monA`/`monB` differed in raw bytes for a reason unrelated to personality/OT ID — exactly the kind of accidental difference this test exists to rule out. Real fix: `CreateMonWithIVs(&monA, SPECIES_WOBBUFFET, 50, 0x11111111, OTID_STRUCT_PRESET(0x22222222), 0);` (fixed IV of 0, same for `monB`) — pins IVs at a shared baseline so only the explicit `SetMonData` calls below it (identical for both mons) can produce a difference, which is what the test is actually checking.
 - `"BoxPokemon data round-trips through every field"` called `CreateMonWithNature(&mon, SPECIES_TORCHIC, 20, 0, NATURE_HARDY)` — a function that no longer exists anywhere in the codebase. Fixed by computing the personality for the desired nature via the existing `GetMonPersonality(enum Species, u8 gender, u8 nature, u8 unownLetter)` and passing it to `CreateMon` directly: `u32 personality = GetMonPersonality(SPECIES_TORCHIC, MON_GENDER_RANDOM, NATURE_HARDY, RANDOM_UNOWN_LETTER); CreateMon(&mon, SPECIES_TORCHIC, 20, personality, OTID_STRUCT_PLAYER_ID);` — the rest of that test immediately overwrites nearly every field via `SetMonData` anyway, so only "a valid mon with a specific nature exists" needed preserving, not the exact old call shape.
 
-This is unrelated to `BoxPokemon`/`VARS_COUNT`/the ribbon catalog — it's stale test code from an earlier API, not something introduced by this plan. It blocked establishing any baseline at all (a compile error anywhere in `test/pokemon.c` fails the whole file, including every test Tasks 1-8 add to it), so it had to be resolved before Task 1 could start. Committed on its own, separate from the feature work:
+This is unrelated to `BoxPokemon`/`VARS_COUNT`/the ribbon catalog — it's stale test code from an earlier API, not something introduced by this plan. It blocked establishing any baseline at all (a compile error anywhere in `test/pokemon.c` fails the whole file, including every test Tasks 1-9 add to it), so it had to be resolved before Task 1 could start. Committed on its own, separate from the feature work:
 
 ```bash
 git add test/pokemon.c
@@ -84,7 +86,191 @@ git commit -m "expand: widen VARS_COUNT from 256 to 2048"
 
 ---
 
-### Task 2: Add Scale (individual size variance)
+### Task 2: Give RecordedBattleSave room to grow
+
+**Files:**
+- Modify: `include/save.h`
+- Modify: `src/recorded_battle.c`
+
+**Discovered mid-implementation, not in the original plan:** attempting Task 3 (Scale) revealed that `struct RecordedBattleSave` (`include/recorded_battle.h` — link-battle replay recording, unrelated to anything else in this plan) embeds `struct Pokemon parties[MAX_BATTLE_TRAINERS][PARTY_SIZE]` (24 full mons) directly, and the whole struct is capped at exactly one flash sector via `STATIC_ASSERT(sizeof(struct RecordedBattleSave) <= SECTOR_COUNTER_OFFSET, RecordedBattleSaveFreeSpace)` in `src/recorded_battle.c:34`. Verified empirically (temporary `char (*p)[sizeof(struct RecordedBattleSave)] = 1;` trick, real compiler error read the type): `sizeof(struct RecordedBattleSave)` is **exactly** 4,092 bytes today — the same as `SECTOR_COUNTER_OFFSET`. Zero headroom exists before this plan touches anything. Any growth to `struct Pokemon` breaks this assert immediately.
+
+At this plan's final `Pokemon` size (148 bytes, after Task 8): `24 * 148 = 3,552` bytes for `parties`, plus the struct's other fields (measured at 1,692 bytes today, unaffected by anything in this plan) = **5,244 bytes** — needs 2 sectors (`2 * 4,092 = 8,184`, comfortable headroom). This task gives it 2 sectors now, sized for the plan's end state, so Tasks 3-8 don't have to keep re-touching this.
+
+- [ ] **Step 1: Add a second sector ID and a sector-count constant**
+
+`include/save.h` currently has:
+
+```c
+#define SECTOR_ID_HOF_1              62
+#define SECTOR_ID_HOF_2              63
+#define SECTOR_ID_TRAINER_HILL       64
+#define SECTOR_ID_RECORDED_BATTLE    65
+#define SECTORS_COUNT                66    // 62 save + 4 special sectors (62 sectors/~248 KB reclaimed from the dropped backup slot)
+```
+
+Change to:
+
+```c
+#define SECTOR_ID_HOF_1              62
+#define SECTOR_ID_HOF_2              63
+#define SECTOR_ID_TRAINER_HILL       64
+#define SECTOR_ID_RECORDED_BATTLE    65
+#define SECTOR_ID_RECORDED_BATTLE_2  66    // struct RecordedBattleSave outgrew one sector once
+                                            // struct Pokemon started growing - see recorded_battle.c
+#define SECTORS_COUNT                67    // 62 save + 5 special sectors (62 sectors/~248 KB reclaimed from the dropped backup slot)
+```
+
+(Task 9 changes these further, for `PokemonStorage` — it should start from this version, not the one shown above from before this task.)
+
+- [ ] **Step 2: Add a sector-count constant next to the struct definition**
+
+`include/recorded_battle.h` — right after `struct RecordedBattleSave`'s closing `};`, add:
+
+```c
+// How many flash sectors sizeof(struct RecordedBattleSave) needs, rounded up.
+// Kept as a real constant (not inlined at each call site) so RecordedBattleToSave/
+// TryCopyRecordedBattleSaveData below and the STATIC_ASSERT in recorded_battle.c
+// can't drift out of sync with each other.
+#define RECORDED_BATTLE_SAVE_SECTORS 2
+```
+
+- [ ] **Step 3: Update the size assert**
+
+`src/recorded_battle.c:34` currently has:
+
+```c
+STATIC_ASSERT(sizeof(struct RecordedBattleSave) <= SECTOR_COUNTER_OFFSET, RecordedBattleSaveFreeSpace);
+```
+
+Change to:
+
+```c
+STATIC_ASSERT(sizeof(struct RecordedBattleSave) <= RECORDED_BATTLE_SAVE_SECTORS * SECTOR_COUNTER_OFFSET, RecordedBattleSaveFreeSpace);
+```
+
+- [ ] **Step 4: Fix the write-buffer allocation (this is a real latent bug, not just a size tweak)**
+
+`src/recorded_battle.c`, in `MoveRecordedBattleToSaveData` (around line 295), currently has:
+
+```c
+    savSection = AllocZeroed(SECTOR_SIZE);
+```
+
+This allocates exactly one sector's worth of buffer, then `RecordedBattleToSave` (next step) does `memcpy(saveSector, battleSave, sizeof(*battleSave))` into it — already sized wrong even before this task, since `sizeof(struct RecordedBattleSave)` (4,092) was already less than `SECTOR_SIZE` (4,096) only by luck; the moment `struct Pokemon` grows at all, this becomes a heap buffer overflow, not just a size mismatch. Change to:
+
+```c
+    savSection = AllocZeroed(RECORDED_BATTLE_SAVE_SECTORS * SECTOR_SIZE);
+```
+
+- [ ] **Step 5: Chunk the write across both sectors**
+
+`src/recorded_battle.c` — `RecordedBattleToSave` currently reads:
+
+```c
+static bool32 RecordedBattleToSave(struct RecordedBattleSave *battleSave, struct RecordedBattleSave *saveSector)
+{
+    memset(saveSector, 0, SECTOR_SIZE);
+    memcpy(saveSector, battleSave, sizeof(*battleSave));
+
+    saveSector->checksum = CalcByteArraySum((void *)(saveSector), sizeof(*saveSector) - 4);
+
+    if (TryWriteSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE, (void *)(saveSector)) != SAVE_STATUS_OK)
+        return FALSE;
+    else
+        return TRUE;
+}
+```
+
+Change to:
+
+```c
+static bool32 RecordedBattleToSave(struct RecordedBattleSave *battleSave, struct RecordedBattleSave *saveSector)
+{
+    memset(saveSector, 0, RECORDED_BATTLE_SAVE_SECTORS * SECTOR_SIZE);
+    memcpy(saveSector, battleSave, sizeof(*battleSave));
+
+    saveSector->checksum = CalcByteArraySum((void *)(saveSector), sizeof(*saveSector) - 4);
+
+    // TryWriteSpecialSaveSector always writes SECTOR_COUNTER_OFFSET bytes starting at
+    // its src pointer, one sector at a time - chunk the struct across both sector IDs.
+    if (TryWriteSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE, (u8 *)(saveSector)) != SAVE_STATUS_OK)
+        return FALSE;
+    if (TryWriteSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE_2, (u8 *)(saveSector) + SECTOR_COUNTER_OFFSET) != SAVE_STATUS_OK)
+        return FALSE;
+    return TRUE;
+}
+```
+
+- [ ] **Step 6: Chunk the read across both sectors**
+
+`src/recorded_battle.c` — `TryCopyRecordedBattleSaveData` currently reads:
+
+```c
+static bool32 TryCopyRecordedBattleSaveData(struct RecordedBattleSave *dst, struct SaveSector *saveBuffer)
+{
+    if (TryReadSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE, (void *)(saveBuffer)) != SAVE_STATUS_OK)
+        return FALSE;
+
+    memcpy(dst, saveBuffer, sizeof(struct RecordedBattleSave));
+
+    if (!IsRecordedBattleSaveValid(dst))
+        return FALSE;
+
+    return TRUE;
+}
+```
+
+Change to:
+
+```c
+static bool32 TryCopyRecordedBattleSaveData(struct RecordedBattleSave *dst, struct SaveSector *saveBuffer)
+{
+    if (TryReadSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE, (void *)(saveBuffer)) != SAVE_STATUS_OK)
+        return FALSE;
+    memcpy(dst, saveBuffer, SECTOR_COUNTER_OFFSET);
+
+    if (TryReadSpecialSaveSector(SECTOR_ID_RECORDED_BATTLE_2, (void *)(saveBuffer)) != SAVE_STATUS_OK)
+        return FALSE;
+    memcpy((u8 *)dst + SECTOR_COUNTER_OFFSET, saveBuffer, sizeof(struct RecordedBattleSave) - SECTOR_COUNTER_OFFSET);
+
+    if (!IsRecordedBattleSaveValid(dst))
+        return FALSE;
+
+    return TRUE;
+}
+```
+
+`saveBuffer` (the temp per-sector read buffer, allocated elsewhere as one `SECTOR_SIZE`) is reused for each sector in turn — it doesn't need to grow, only `dst` (already allocated at `sizeof(struct RecordedBattleSave)`, which already scales automatically) does.
+
+- [ ] **Step 7: Verify function signatures weren't already using `void *` in a way that breaks the `(u8 *)` casts above**
+
+Run:
+```bash
+grep -n "^u32 TryWriteSpecialSaveSector\|^u32 TryReadSpecialSaveSector" src/save.c
+```
+Expected: both take `u8 *` parameters already (`TryReadSpecialSaveSector(u8 sector, u8 *dst)`, `TryWriteSpecialSaveSector(u8 sector, u8 *src)`) — the casts in Steps 5-6 should compile without warnings. If the signatures differ from this, stop and report NEEDS_CONTEXT rather than guessing at a cast.
+
+- [ ] **Step 8: Build to confirm**
+
+Run: `make -j$(nproc)`
+Expected: builds clean, no warnings from `src/recorded_battle.c` or `src/save.c`.
+
+There's no existing unit test exercising the RecordedBattleSave flash round-trip (checked `test/*.c` — none found; this feature isn't covered by the `TEST()` DSL used elsewhere, likely because it needs real flash read/write simulation this test framework doesn't provide). Verification for this task is the `STATIC_ASSERT` (compile-time) plus a clean build — there isn't a behavioral test to add here without building new test infrastructure, which is out of scope.
+
+- [ ] **Step 9: Check the save-compatibility guard, same as every other task**
+
+Run: `timeout 300 make TESTS="backwards compatible" check -j$(nproc)` — this task doesn't touch `SaveBlock1`/`SaveBlock2`/`SaveBlock3`/`PokemonStorage`, so all four `test/save.c` guard tests should already PASS unaffected. Confirm rather than assume.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add include/save.h include/recorded_battle.h src/recorded_battle.c
+git commit -m "expand: give RecordedBattleSave 2 sectors instead of 1"
+```
+
+---
+
+### Task 3: Add Scale (individual size variance)
 
 **Files:**
 - Modify: `include/pokemon.h` (`struct PokemonSubstruct0`, `enum MonData`, prototypes)
@@ -203,7 +389,7 @@ git commit -m "expand: add Scale to PokemonSubstruct0"
 
 ---
 
-### Task 3: Widen metLocation to u16
+### Task 4: Widen metLocation to u16
 
 **Files:**
 - Modify: `include/pokemon.h` (`struct PokemonSubstruct3`)
@@ -299,7 +485,7 @@ git commit -m "expand: widen metLocation from u8 to u16"
 
 ---
 
-### Task 4: Minigame-enrollment flag
+### Task 5: Minigame-enrollment flag
 
 **Files:**
 - Modify: `include/pokemon.h`
@@ -408,7 +594,7 @@ git commit -m "expand: rename unused_0B to isEnrolledInMinigame"
 
 ---
 
-### Task 5: Shadow Pokémon data (nickname union)
+### Task 6: Shadow Pokémon data (nickname union)
 
 **Files:**
 - Modify: `include/pokemon.h`
@@ -495,7 +681,7 @@ struct BoxPokemon
 
 - [ ] **Step 5: Wire the getters**
 
-In `src/pokemon.c`, `GetBoxMonData3`/`GetBoxMonData2`'s switch, add after the `MON_DATA_IS_ENROLLED_IN_MINIGAME` case from Task 4:
+In `src/pokemon.c`, `GetBoxMonData3`/`GetBoxMonData2`'s switch, add after the `MON_DATA_IS_ENROLLED_IN_MINIGAME` case from Task 5:
 
 ```c
         case MON_DATA_IS_REVERSE:
@@ -511,7 +697,7 @@ In `src/pokemon.c`, `GetBoxMonData3`/`GetBoxMonData2`'s switch, add after the `M
 
 - [ ] **Step 6: Wire the setters**
 
-In `SetBoxMonData`, add after the `MON_DATA_IS_ENROLLED_IN_MINIGAME` case from Task 4:
+In `SetBoxMonData`, add after the `MON_DATA_IS_ENROLLED_IN_MINIGAME` case from Task 5:
 
 ```c
         case MON_DATA_IS_REVERSE:
@@ -539,7 +725,7 @@ git commit -m "expand: add Shadow Pokemon data via nickname union"
 
 ---
 
-### Task 6: Ribbon & mark catalog (PokemonSubstruct4)
+### Task 7: Ribbon & mark catalog (PokemonSubstruct4)
 
 **Files:**
 - Modify: `include/pokemon.h`
@@ -728,13 +914,13 @@ git commit -m "expand: add PokemonSubstruct4 ribbon/mark catalog"
 
 ---
 
-### Task 7: True up BoxPokemon to exactly 128 bytes
+### Task 8: True up BoxPokemon to exactly 128 bytes
 
 **Files:**
 - Modify: `include/pokemon.h`
 - Test: `test/pokemon.c`
 
-The reserved byte count below (7) was verified empirically against the real target compiler before this plan was written — `arm-none-eabi-gcc -std=c11 -mthumb -mcpu=arm7tdmi` on the exact field layout from Tasks 2-6 reports `sizeof(struct PokemonSubstruct0) == 16`, `sizeof(struct PokemonSubstruct3) == 16`, `sizeof(struct PokemonSubstruct4) == 33` (compiler-inserted alignment padding included), giving `32 (header) + 56 (secure region) + 33 (substruct4) + 7 (reserved) = 128`.
+The reserved byte count below (7) was verified empirically against the real target compiler before this plan was written — `arm-none-eabi-gcc -std=c11 -mthumb -mcpu=arm7tdmi` on the exact field layout from Tasks 3-7 reports `sizeof(struct PokemonSubstruct0) == 16`, `sizeof(struct PokemonSubstruct3) == 16`, `sizeof(struct PokemonSubstruct4) == 33` (compiler-inserted alignment padding included), giving `32 (header) + 56 (secure region) + 33 (substruct4) + 7 (reserved) = 128`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -794,7 +980,7 @@ git commit -m "expand: reserve 7 bytes, lock BoxPokemon at 128 bytes"
 
 ---
 
-### Task 8: Resize the PC-storage sector budget — and fix a pre-existing gap found while planning this
+### Task 9: Resize the PC-storage sector budget — and fix a pre-existing gap found while planning this
 
 **Files:**
 - Modify: `include/save.h`
@@ -835,7 +1021,7 @@ Extend this list so it runs `N = 0` through `N = neededChunks - 1` (from Step 1)
 
 Let `sb1Chunks` = `neededChunks` from Step 1 (the corrected `SaveBlock1` chunk count — use 17 if Step 1 confirmed the existing reservation already covers it).
 
-`include/save.h` currently has:
+`include/save.h`, after Task 2, currently has:
 
 ```c
 #define SECTOR_ID_SAVEBLOCK2          0      // 1 sector
@@ -848,7 +1034,9 @@ Let `sb1Chunks` = `neededChunks` from Step 1 (the corrected `SaveBlock1` chunk c
 #define SECTOR_ID_HOF_2              63
 #define SECTOR_ID_TRAINER_HILL       64
 #define SECTOR_ID_RECORDED_BATTLE    65
-#define SECTORS_COUNT                66    // 62 save + 4 special sectors (62 sectors/~248 KB reclaimed from the dropped backup slot)
+#define SECTOR_ID_RECORDED_BATTLE_2  66    // struct RecordedBattleSave outgrew one sector once
+                                            // struct Pokemon started growing - see recorded_battle.c
+#define SECTORS_COUNT                67    // 62 save + 5 special sectors (62 sectors/~248 KB reclaimed from the dropped backup slot)
 ```
 
 `72 boxes * 30 slots/box * 128 bytes = 276,480 bytes`, and each sector carries `SECTOR_DATA_SIZE` (3,968) usable bytes for this chunk, so `ceil(276480 / 3968) = 70` PC-storage sectors (up from 44). Combined with `sb1Chunks` from Step 1:
@@ -864,10 +1052,11 @@ Let `sb1Chunks` = `neededChunks` from Step 1 (the corrected `SaveBlock1` chunk c
 #define SECTOR_ID_HOF_2               (SECTOR_ID_HOF_1 + 1)
 #define SECTOR_ID_TRAINER_HILL        (SECTOR_ID_HOF_1 + 2)
 #define SECTOR_ID_RECORDED_BATTLE     (SECTOR_ID_HOF_1 + 3)
-#define SECTORS_COUNT                 (SECTOR_ID_HOF_1 + 4)    // save slot + 4 special sectors
+#define SECTOR_ID_RECORDED_BATTLE_2   (SECTOR_ID_HOF_1 + 4)
+#define SECTORS_COUNT                 (SECTOR_ID_HOF_1 + 5)    // save slot + 5 special sectors
 ```
 
-Replace `sb1Chunks` with the literal number Step 1 found before committing — plain `#define` integer constants, not the symbolic form above (written symbolically here only so the arithmetic is traceable; e.g. with `sb1Chunks = 17` this reproduces exactly `SECTOR_ID_SAVEBLOCK1_END 17`, `SECTOR_ID_PKMN_STORAGE_START 18`, `SECTOR_ID_PKMN_STORAGE_END 87`, `NUM_SECTORS_PER_SLOT 88`, `SECTOR_ID_HOF_1 88`, `SECTOR_ID_HOF_2 89`, `SECTOR_ID_TRAINER_HILL 90`, `SECTOR_ID_RECORDED_BATTLE 91`, `SECTORS_COUNT 92` — 92 of the 128 sectors available in this project's 512 KB flash target (`claude_docs/MGBA_EXPANSION_GUIDE.md`), 36 spare). Keep the descriptive comments from the original block, updated to match.
+Replace `sb1Chunks` with the literal number Step 1 found before committing — plain `#define` integer constants, not the symbolic form above (written symbolically here only so the arithmetic is traceable; e.g. with `sb1Chunks = 17` this reproduces exactly `SECTOR_ID_SAVEBLOCK1_END 17`, `SECTOR_ID_PKMN_STORAGE_START 18`, `SECTOR_ID_PKMN_STORAGE_END 87`, `NUM_SECTORS_PER_SLOT 88`, `SECTOR_ID_HOF_1 88`, `SECTOR_ID_HOF_2 89`, `SECTOR_ID_TRAINER_HILL 90`, `SECTOR_ID_RECORDED_BATTLE 91`, `SECTOR_ID_RECORDED_BATTLE_2 92`, `SECTORS_COUNT 93` — 93 of the 128 sectors available in this project's 512 KB flash target (`claude_docs/MGBA_EXPANSION_GUIDE.md`), 35 spare). Keep the descriptive comments from the original block, updated to match.
 
 - [ ] **Step 4: Extend the PokemonStorage chunk list**
 
@@ -893,10 +1082,10 @@ Every line in between follows the identical pattern already present for entries 
 Run: `make -j$(nproc)`
 Expected: builds clean, and `1 (SaveBlock2) + sb1Chunks (SaveBlock1) + 70 (PokemonStorage) == NUM_SECTORS_PER_SLOT` holds by construction (Step 3 defines `NUM_SECTORS_PER_SLOT` from the same `sb1Chunks` and `70`, so this can't drift out of sync the way it did before Step 1-2 fixed it).
 
-- [ ] **Step 6: Run the full test suite**
+- [ ] **Step 6: Run the save-compatibility guards and the tests this plan has added so far**
 
-Run: `make check -j`
-Expected: PASS across the board — this task changes save-layout bookkeeping, not any struct or accessor, so no test from Tasks 1-7 should be affected.
+Run: `timeout 300 make TESTS="backwards compatible" check -j$(nproc)`, then `timeout 300 make TESTS="BoxPokemon" check -j$(nproc)`, then repeat with `TESTS=` set to each other test name added in Tasks 3-8. Do not run a bare/unscoped `make check` — it is known to hang indefinitely in this environment for reasons unrelated to this plan; every invocation needs a `TESTS="..."` filter and a `timeout` wrapper.
+Expected: PASS across the board — this task changes save-layout bookkeeping, not any struct or accessor, so no test from Tasks 1-8 should be affected.
 
 - [ ] **Step 7: Commit**
 
@@ -907,7 +1096,7 @@ git commit -m "expand: fix SaveBlock1 chunk gap, resize PC storage for 128-byte 
 
 ---
 
-### Task 9: Full verification
+### Task 10: Full verification
 
 **Files:** none (verification only)
 
@@ -916,24 +1105,36 @@ git commit -m "expand: fix SaveBlock1 chunk gap, resize PC storage for 128-byte 
 Run: `make clean && make -j$(nproc)`
 Expected: builds clean, no warnings about `struct BoxPokemon`, `PokemonSubstruct0/3/4`, or `sSaveSlotLayout`.
 
-- [ ] **Step 2: Full test suite**
+- [ ] **Step 2: Full test suite, scoped**
 
-Run: `make check -j`
-Expected: all tests PASS, including every `TEST(...)` added in Tasks 2-7 and the pre-existing `test/pokemon.c` suite.
+There is no safe way to run every test in this codebase in one invocation in this environment — a bare/unscoped `make check` is known to hang indefinitely (confirmed during this plan's own execution: 20 parallel emulator test workers spawned and never reported back, for reasons unrelated to anything in this plan). Instead, run each test this plan added, individually, with a `timeout`:
+
+```bash
+timeout 300 make TESTS="Scale is stored" check -j$(nproc)
+timeout 300 make TESTS="Met location supports" check -j$(nproc)
+timeout 300 make TESTS="Minigame enrollment" check -j$(nproc)
+timeout 300 make TESTS="Shadow Pokemon data" check -j$(nproc)
+timeout 300 make TESTS="A mon can hold up" check -j$(nproc)
+timeout 300 make TESTS="BoxPokemon is exactly" check -j$(nproc)
+timeout 300 make TESTS="BoxPokemon" check -j$(nproc)
+timeout 300 make TESTS="backwards compatible" check -j$(nproc)
+```
+
+Expected: every one PASSes. If a broader confidence check is wanted beyond this plan's own tests, scope it to one subsystem at a time (e.g. `TESTS="Battle"`) with a generous `timeout`, never unscoped.
 
 - [ ] **Step 3: Confirm the final numbers**
 
 Run:
 ```bash
-grep -n "SECTORS_COUNT\|NUM_SECTORS_PER_SLOT\|SECTOR_ID_PKMN_STORAGE_END" include/save.h
+grep -n "SECTORS_COUNT\|NUM_SECTORS_PER_SLOT\|SECTOR_ID_PKMN_STORAGE_END\|SECTOR_ID_RECORDED_BATTLE_2" include/save.h
 ```
-Expected: `SECTORS_COUNT` = `sb1Chunks + 75` (1 SaveBlock2 + `sb1Chunks` SaveBlock1 + 70 PokemonStorage + 4 special), using whatever `sb1Chunks` Task 8 Step 1 found. If `sb1Chunks` came out to 17 (the value the pre-existing constant already reserved, most likely if that reservation was sized correctly in the first place), this is `SECTORS_COUNT 92`, `NUM_SECTORS_PER_SLOT 88`, `SECTOR_ID_PKMN_STORAGE_END 87` — 92 of the 128 sectors available in the 512 KB target, 36 spare. Confirm `SECTORS_COUNT <= 128` regardless of the exact `sb1Chunks` value — that's the real target-hardware ceiling this whole plan is sized against.
+Expected: `SECTORS_COUNT` = `sb1Chunks + 76` (1 SaveBlock2 + `sb1Chunks` SaveBlock1 + 70 PokemonStorage + 5 special), using whatever `sb1Chunks` Task 9 Step 1 found. If `sb1Chunks` came out to 17 (the value the pre-existing constant already reserved, most likely if that reservation was sized correctly in the first place), this is `SECTORS_COUNT 93`, `NUM_SECTORS_PER_SLOT 88`, `SECTOR_ID_PKMN_STORAGE_END 87`, `SECTOR_ID_RECORDED_BATTLE_2 92` — 93 of the 128 sectors available in the 512 KB target, 35 spare. Confirm `SECTORS_COUNT <= 128` regardless of the exact `sb1Chunks` value — that's the real target-hardware ceiling this whole plan is sized against.
 
 - [ ] **Step 4: Final commit (if any working-tree changes remain)**
 
 ```bash
 git status
-# if clean, nothing to do - Tasks 1-8 already committed everything
+# if clean, nothing to do - Tasks 1-9 already committed everything
 ```
 
 ---
