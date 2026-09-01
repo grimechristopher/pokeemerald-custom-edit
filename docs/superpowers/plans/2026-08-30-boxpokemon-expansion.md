@@ -40,7 +40,7 @@ Discovered while establishing a clean baseline before Task 1: `test/pokemon.c` d
 - `"BoxPokemon raw layout is independent of personality and OT ID"` called `CreateMon(&monA, SPECIES_WOBBUFFET, 50, 0, TRUE, 0x11111111, OT_ID_PRESET, 0x22222222)` — an 8-argument call matching an old `CreateMon` signature. The current one is `void CreateMon(struct Pokemon *mon, enum Species species, u8 level, u32 personality, struct OriginalTrainerId);` (5 args). First fix attempt used plain `CreateMon` with the corrected argument shape — this compiled but then *failed at runtime* (`EXPECT_EQ(-17, 0)` on the `memcmp`), because plain `CreateMon` rolls random IVs per call (confirmed via `USE_RANDOM_IVS` in `src/pokemon.c`), so `monA`/`monB` differed in raw bytes for a reason unrelated to personality/OT ID — exactly the kind of accidental difference this test exists to rule out. Real fix: `CreateMonWithIVs(&monA, SPECIES_WOBBUFFET, 50, 0x11111111, OTID_STRUCT_PRESET(0x22222222), 0);` (fixed IV of 0, same for `monB`) — pins IVs at a shared baseline so only the explicit `SetMonData` calls below it (identical for both mons) can produce a difference, which is what the test is actually checking.
 - `"BoxPokemon data round-trips through every field"` called `CreateMonWithNature(&mon, SPECIES_TORCHIC, 20, 0, NATURE_HARDY)` — a function that no longer exists anywhere in the codebase. Fixed by computing the personality for the desired nature via the existing `GetMonPersonality(enum Species, u8 gender, u8 nature, u8 unownLetter)` and passing it to `CreateMon` directly: `u32 personality = GetMonPersonality(SPECIES_TORCHIC, MON_GENDER_RANDOM, NATURE_HARDY, RANDOM_UNOWN_LETTER); CreateMon(&mon, SPECIES_TORCHIC, 20, personality, OTID_STRUCT_PLAYER_ID);` — the rest of that test immediately overwrites nearly every field via `SetMonData` anyway, so only "a valid mon with a specific nature exists" needed preserving, not the exact old call shape.
 
-This is unrelated to `BoxPokemon`/`VARS_COUNT`/the ribbon catalog — it's stale test code from an earlier API, not something introduced by this plan. It blocked establishing any baseline at all (a compile error anywhere in `test/pokemon.c` fails the whole file, including every test Tasks 1-9 add to it), so it had to be resolved before Task 1 could start. Committed on its own, separate from the feature work:
+This is unrelated to `BoxPokemon`/`VARS_COUNT`/the ribbon catalog — it's stale test code from an earlier API, not something introduced by this plan. It blocked establishing any baseline at all (a compile error anywhere in `test/pokemon.c` fails the whole file, including every test Tasks 1-10 add to it), so it had to be resolved before Task 1 could start. Committed on its own, separate from the feature work:
 
 ```bash
 git add test/pokemon.c
@@ -270,7 +270,187 @@ git commit -m "expand: give RecordedBattleSave 2 sectors instead of 1"
 
 ---
 
-### Task 3: Add Scale (individual size variance)
+### Task 3: Widen the save-slot validity bitmask past 64 sectors
+
+**Files:**
+- Modify: `src/save.c`
+
+**Discovered mid-implementation, not in the original plan:** attempting Task 4 (Scale) revealed that `struct PokemonStorage` also needs more than 44 sectors the moment `BoxPokemon` grows at all — the same class of problem Task 2 fixed for `RecordedBattleSave`, and exactly what Task 10 already plans to fix (44 → 70 sectors, `NUM_SECTORS_PER_SLOT` 62 → ~88). But auditing `src/save.c` before letting Task 10 run early turned up something more fundamental than a sector-count budget: `GetSaveValidStatus()` tracks "which sectors loaded correctly" in a **single `u64` bitmask** —
+
+```c
+u64 validSectorFlags = 0;  // 64-bit for 62-sector support
+...
+validSectorFlags |= 1ULL << gReadWriteSector->id;  // 64-bit shift for 62 sectors
+...
+else if (validSectorFlags == (1ULL << NUM_SECTORS_PER_SLOT) - 1)  // 64-bit shift for 62 sectors
+```
+
+A `u64` can address at most 63-64 sector IDs before `1ULL << NUM_SECTORS_PER_SLOT` becomes undefined behavior (shift amount ≥ the type's width). Task 10 needs `NUM_SECTORS_PER_SLOT ≈ 88` — not tight, architecturally impossible with this mechanism as written, independent of how much flash space is actually available. This blocks *any* sector-count growth past ~63, including the 44→70 `PokemonStorage` growth Task 10 already plans, not just this plan's own numbers.
+
+**A related, pre-existing bug was also found and is being deliberately left alone:** `gDamagedSaveSectors` (flash write-failure tracking, `SetDamagedSectorBits()`) uses the same one-bit-per-sector pattern as a `u32` — sector IDs 32+ are *already* undefined behavior in the current, shipped codebase, before this plan touches anything. Not fixing it here: (1) it's write-failure tracking, not load-correctness — `GetSaveValidStatus` gates whether a save loads at all, this doesn't; (2) this project is emulator-only (see `README`/`save.c`'s own comments on the dropped backup slot) where a flash *write* practically never fails, so the affected path is rarely if ever exercised; (3) properly fixing it means restructuring 8+ call sites that check it as a plain boolean (`if (gDamagedSaveSectors)`), which silently break if the type becomes an array — real work, disproportionate to what it buys here. Left as a documented, pre-existing issue for whoever next touches flash-write-failure handling, not swept under the rug.
+
+- [ ] **Step 1: Add a word-count constant**
+
+`src/save.c` — near the top, after the existing `#define SAVEBLOCK_CHUNK(...)` macro (around line 52), add:
+
+```c
+// GetSaveValidStatus() needs one bit per sector in the main save slot to track
+// which ones loaded correctly - u64 tops out at 63-64 sectors (undefined behavior
+// beyond that), so this is a real bitset sized to NUM_SECTORS_PER_SLOT instead of
+// a single scalar. Scales automatically as NUM_SECTORS_PER_SLOT changes.
+#define VALID_SECTOR_FLAGS_WORDS ((NUM_SECTORS_PER_SLOT + 31) / 32)
+```
+
+- [ ] **Step 2: Replace the bitmask in GetSaveValidStatus**
+
+`src/save.c` — `GetSaveValidStatus` currently reads (~line 560):
+
+```c
+static u8 GetSaveValidStatus(const struct SaveSectorLocation *locations)
+{
+    u16 i;
+    u16 checksum;
+    u32 saveCounter = 0;
+    u64 validSectorFlags = 0;  // 64-bit for 62-sector support
+    bool8 signatureValid = FALSE;
+    u8 saveStatus;
+
+    for (i = 0; i < NUM_SECTORS_PER_SLOT; i++)
+    {
+        ReadFlashSector(i, gReadWriteSector);
+        if (gReadWriteSector->signature == SECTOR_SIGNATURE)
+        {
+            signatureValid = TRUE;
+            checksum = CalculateChecksum(gReadWriteSector->data, locations[gReadWriteSector->id].size);
+            if (gReadWriteSector->checksum == checksum)
+            {
+                saveCounter = gReadWriteSector->counter;
+                validSectorFlags |= 1ULL << gReadWriteSector->id;  // 64-bit shift for 62 sectors
+            }
+        }
+    }
+
+    if (!signatureValid)
+    {
+        // No sectors have the correct signature, treat it as empty (fresh flash)
+        saveStatus = SAVE_STATUS_EMPTY;
+    }
+    else if (validSectorFlags == (1ULL << NUM_SECTORS_PER_SLOT) - 1)  // 64-bit shift for 62 sectors
+    {
+        saveStatus = SAVE_STATUS_OK;
+    }
+    else
+    {
+        // Some sectors are valid but not all - there's no backup slot to recover from
+        saveStatus = SAVE_STATUS_CORRUPT;
+    }
+
+    if (saveStatus == SAVE_STATUS_OK)
+    {
+        gSaveCounter = saveCounter;
+    }
+    else
+    {
+        gSaveCounter = 0;
+        gLastWrittenSector = 0;
+    }
+
+    return saveStatus;
+}
+```
+
+Change to:
+
+```c
+static u8 GetSaveValidStatus(const struct SaveSectorLocation *locations)
+{
+    u16 i;
+    u16 checksum;
+    u32 saveCounter = 0;
+    u32 validSectorFlags[VALID_SECTOR_FLAGS_WORDS] = {0};
+    bool8 signatureValid = FALSE;
+    bool8 allSectorsValid;
+    u8 saveStatus;
+
+    for (i = 0; i < NUM_SECTORS_PER_SLOT; i++)
+    {
+        ReadFlashSector(i, gReadWriteSector);
+        if (gReadWriteSector->signature == SECTOR_SIGNATURE)
+        {
+            signatureValid = TRUE;
+            checksum = CalculateChecksum(gReadWriteSector->data, locations[gReadWriteSector->id].size);
+            if (gReadWriteSector->checksum == checksum)
+            {
+                saveCounter = gReadWriteSector->counter;
+                // gReadWriteSector->id is trusted to be in [0, NUM_SECTORS_PER_SLOT) once
+                // the signature matches - same trust level the original single-word
+                // bitmask already relied on, not a new assumption.
+                validSectorFlags[gReadWriteSector->id / 32] |= 1UL << (gReadWriteSector->id % 32);
+            }
+        }
+    }
+
+    if (!signatureValid)
+    {
+        // No sectors have the correct signature, treat it as empty (fresh flash)
+        saveStatus = SAVE_STATUS_EMPTY;
+    }
+    else
+    {
+        allSectorsValid = TRUE;
+        for (i = 0; i < NUM_SECTORS_PER_SLOT; i++)
+        {
+            if (!(validSectorFlags[i / 32] & (1UL << (i % 32))))
+            {
+                allSectorsValid = FALSE;
+                break;
+            }
+        }
+
+        if (allSectorsValid)
+            saveStatus = SAVE_STATUS_OK;
+        else
+            // Some sectors are valid but not all - there's no backup slot to recover from
+            saveStatus = SAVE_STATUS_CORRUPT;
+    }
+
+    if (saveStatus == SAVE_STATUS_OK)
+    {
+        gSaveCounter = saveCounter;
+    }
+    else
+    {
+        gSaveCounter = 0;
+        gLastWrittenSector = 0;
+    }
+
+    return saveStatus;
+}
+```
+
+This preserves the original's exact semantics — a bit per logical sector id, deduplicated (setting the same id's bit twice is a no-op, same as before), "valid" only if every id in `[0, NUM_SECTORS_PER_SLOT)` was seen — just sized to however many words `NUM_SECTORS_PER_SLOT` actually needs instead of a single 64-bit word. The dedup property matters here: sectors are wear-leveled/rotated across physical flash cells (see the file's own header comment), so a corrupted flash could plausibly return the same logical id from two different physical positions - a plain counter (count valid reads, compare to `NUM_SECTORS_PER_SLOT`) would NOT catch that; this bitset does, matching the original.
+
+- [ ] **Step 3: Build to confirm**
+
+Run: `make -j$(nproc)`
+Expected: builds clean. At today's `NUM_SECTORS_PER_SLOT` (62, before Task 10 runs), `VALID_SECTOR_FLAGS_WORDS` evaluates to 2 — this is already exercising the multi-word path even before Task 10 changes the sector count, so it's a real test of the new logic, not a no-op.
+
+- [ ] **Step 4: Check the save-compatibility guards**
+
+Run: `timeout 300 make TESTS="backwards compatible" check -j$(nproc)` for each of the four exact test names in `test/save.c` (`SaveBlock1 is backwards compatible`, `SaveBlock2 is backwards compatible`, `SaveBlock3 is backwards compatible`, `PokemonStorage is backwards compatible` — the `TESTS=` filter matches by exact prefix, not substring, so use the full names). This task doesn't change any struct size, so all four should already PASS, unaffected.
+
+There's no existing unit test exercising `GetSaveValidStatus`'s actual flash-corruption-detection behavior (it needs simulated flash read failures, which the `TEST()` DSL used elsewhere doesn't provide) — verification here is the build succeeding plus careful code review confirming the bitset logic is a faithful, width-independent translation of the original. Flag this gap in your report rather than silently treating a clean build as proof of correctness.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/save.c
+git commit -m "expand: widen save-slot validity bitmask past 64 sectors"
+```
+
+---
+
+### Task 4: Add Scale (individual size variance)
 
 **Files:**
 - Modify: `include/pokemon.h` (`struct PokemonSubstruct0`, `enum MonData`, prototypes)
@@ -389,7 +569,7 @@ git commit -m "expand: add Scale to PokemonSubstruct0"
 
 ---
 
-### Task 4: Widen metLocation to u16
+### Task 5: Widen metLocation to u16
 
 **Files:**
 - Modify: `include/pokemon.h` (`struct PokemonSubstruct3`)
@@ -485,7 +665,7 @@ git commit -m "expand: widen metLocation from u8 to u16"
 
 ---
 
-### Task 5: Minigame-enrollment flag
+### Task 6: Minigame-enrollment flag
 
 **Files:**
 - Modify: `include/pokemon.h`
@@ -594,7 +774,7 @@ git commit -m "expand: rename unused_0B to isEnrolledInMinigame"
 
 ---
 
-### Task 6: Shadow Pokémon data (nickname union)
+### Task 7: Shadow Pokémon data (nickname union)
 
 **Files:**
 - Modify: `include/pokemon.h`
@@ -681,7 +861,7 @@ struct BoxPokemon
 
 - [ ] **Step 5: Wire the getters**
 
-In `src/pokemon.c`, `GetBoxMonData3`/`GetBoxMonData2`'s switch, add after the `MON_DATA_IS_ENROLLED_IN_MINIGAME` case from Task 5:
+In `src/pokemon.c`, `GetBoxMonData3`/`GetBoxMonData2`'s switch, add after the `MON_DATA_IS_ENROLLED_IN_MINIGAME` case from Task 6:
 
 ```c
         case MON_DATA_IS_REVERSE:
@@ -697,7 +877,7 @@ In `src/pokemon.c`, `GetBoxMonData3`/`GetBoxMonData2`'s switch, add after the `M
 
 - [ ] **Step 6: Wire the setters**
 
-In `SetBoxMonData`, add after the `MON_DATA_IS_ENROLLED_IN_MINIGAME` case from Task 5:
+In `SetBoxMonData`, add after the `MON_DATA_IS_ENROLLED_IN_MINIGAME` case from Task 6:
 
 ```c
         case MON_DATA_IS_REVERSE:
@@ -725,7 +905,7 @@ git commit -m "expand: add Shadow Pokemon data via nickname union"
 
 ---
 
-### Task 7: Ribbon & mark catalog (PokemonSubstruct4)
+### Task 8: Ribbon & mark catalog (PokemonSubstruct4)
 
 **Files:**
 - Modify: `include/pokemon.h`
@@ -914,13 +1094,13 @@ git commit -m "expand: add PokemonSubstruct4 ribbon/mark catalog"
 
 ---
 
-### Task 8: True up BoxPokemon to exactly 128 bytes
+### Task 9: True up BoxPokemon to exactly 128 bytes
 
 **Files:**
 - Modify: `include/pokemon.h`
 - Test: `test/pokemon.c`
 
-The reserved byte count below (7) was verified empirically against the real target compiler before this plan was written — `arm-none-eabi-gcc -std=c11 -mthumb -mcpu=arm7tdmi` on the exact field layout from Tasks 3-7 reports `sizeof(struct PokemonSubstruct0) == 16`, `sizeof(struct PokemonSubstruct3) == 16`, `sizeof(struct PokemonSubstruct4) == 33` (compiler-inserted alignment padding included), giving `32 (header) + 56 (secure region) + 33 (substruct4) + 7 (reserved) = 128`.
+The reserved byte count below (7) was verified empirically against the real target compiler before this plan was written — `arm-none-eabi-gcc -std=c11 -mthumb -mcpu=arm7tdmi` on the exact field layout from Tasks 4-8 reports `sizeof(struct PokemonSubstruct0) == 16`, `sizeof(struct PokemonSubstruct3) == 16`, `sizeof(struct PokemonSubstruct4) == 33` (compiler-inserted alignment padding included), giving `32 (header) + 56 (secure region) + 33 (substruct4) + 7 (reserved) = 128`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -980,7 +1160,7 @@ git commit -m "expand: reserve 7 bytes, lock BoxPokemon at 128 bytes"
 
 ---
 
-### Task 9: Resize the PC-storage sector budget — and fix a pre-existing gap found while planning this
+### Task 10: Resize the PC-storage sector budget — and fix a pre-existing gap found while planning this
 
 **Files:**
 - Modify: `include/save.h`
@@ -1085,7 +1265,7 @@ Expected: builds clean, and `1 (SaveBlock2) + sb1Chunks (SaveBlock1) + 70 (Pokem
 - [ ] **Step 6: Run the save-compatibility guards and the tests this plan has added so far**
 
 Run: `timeout 300 make TESTS="backwards compatible" check -j$(nproc)`, then `timeout 300 make TESTS="BoxPokemon" check -j$(nproc)`, then repeat with `TESTS=` set to each other test name added in Tasks 3-8. Do not run a bare/unscoped `make check` — it is known to hang indefinitely in this environment for reasons unrelated to this plan; every invocation needs a `TESTS="..."` filter and a `timeout` wrapper.
-Expected: PASS across the board — this task changes save-layout bookkeeping, not any struct or accessor, so no test from Tasks 1-8 should be affected.
+Expected: PASS across the board — this task changes save-layout bookkeeping, not any struct or accessor, so no test from Tasks 1-9 should be affected.
 
 - [ ] **Step 7: Commit**
 
@@ -1096,7 +1276,7 @@ git commit -m "expand: fix SaveBlock1 chunk gap, resize PC storage for 128-byte 
 
 ---
 
-### Task 10: Full verification
+### Task 11: Full verification
 
 **Files:** none (verification only)
 
@@ -1134,7 +1314,7 @@ Expected: `SECTORS_COUNT` = `sb1Chunks + 76` (1 SaveBlock2 + `sb1Chunks` SaveBlo
 
 ```bash
 git status
-# if clean, nothing to do - Tasks 1-9 already committed everything
+# if clean, nothing to do - Tasks 1-10 already committed everything
 ```
 
 ---
