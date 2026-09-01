@@ -125,6 +125,7 @@ enum MonData {
     MON_DATA_GIGANTAMAX_FACTOR,
     MON_DATA_TERA_TYPE,
     MON_DATA_EVOLUTION_TRACKER,
+    MON_DATA_SCALE,
 };
 
 struct PokemonSubstruct0
@@ -141,6 +142,9 @@ struct PokemonSubstruct0
     u16 pokeball:6; // 63 balls.
     u16 nickname12:8; // 12th character of nickname.
     u16 unused_0A:2;
+    u8 scale; // Individual size variance, 0-255. Drives both height and weight
+              // display against the species' base figures; 0 and 255 are the
+              // Mini/Jumbo Mark thresholds.
 };
 
 struct PokemonSubstruct1

@@ -758,3 +758,12 @@ TEST("BoxPokemon data round-trips through every field")
     EXPECT_EQ(GetMonData(&mon, MON_DATA_DYNAMAX_LEVEL), 3);
     EXPECT_EQ(GetMonData(&mon, MON_DATA_OT_GENDER), 0);
 }
+
+TEST("Scale is stored and round-trips through Get/SetMonData")
+{
+    struct Pokemon mon;
+    u32 scale = 200;
+    CreateMon(&mon, SPECIES_WOBBUFFET, 50, 0x11111111, OTID_STRUCT_PRESET(0x22222222));
+    SetMonData(&mon, MON_DATA_SCALE, &scale);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_SCALE), 200);
+}
