@@ -51,6 +51,12 @@ static void CopyFromSaveBlock3(u32, struct SaveSector *);
     min(sizeof(structure) - chunkNum * SECTOR_DATA_SIZE, SECTOR_DATA_SIZE) : 0 \
 }
 
+// GetSaveValidStatus() needs one bit per sector in the main save slot to track
+// which ones loaded correctly - u64 tops out at 63-64 sectors (undefined behavior
+// beyond that), so this is a real bitset sized to NUM_SECTORS_PER_SLOT instead of
+// a single scalar. Scales automatically as NUM_SECTORS_PER_SLOT changes.
+#define VALID_SECTOR_FLAGS_WORDS ((NUM_SECTORS_PER_SLOT + 31) / 32)
+
 struct
 {
     u32 offset;  // Changed to u32 for large structure offsets (72-box support)
@@ -562,8 +568,9 @@ static u8 GetSaveValidStatus(const struct SaveSectorLocation *locations)
     u16 i;
     u16 checksum;
     u32 saveCounter = 0;
-    u64 validSectorFlags = 0;  // 64-bit for 62-sector support
+    u32 validSectorFlags[VALID_SECTOR_FLAGS_WORDS] = {0};
     bool8 signatureValid = FALSE;
+    bool8 allSectorsValid;
     u8 saveStatus;
 
     for (i = 0; i < NUM_SECTORS_PER_SLOT; i++)
@@ -576,7 +583,10 @@ static u8 GetSaveValidStatus(const struct SaveSectorLocation *locations)
             if (gReadWriteSector->checksum == checksum)
             {
                 saveCounter = gReadWriteSector->counter;
-                validSectorFlags |= 1ULL << gReadWriteSector->id;  // 64-bit shift for 62 sectors
+                // gReadWriteSector->id is trusted to be in [0, NUM_SECTORS_PER_SLOT) once
+                // the signature matches - same trust level the original single-word
+                // bitmask already relied on, not a new assumption.
+                validSectorFlags[gReadWriteSector->id / 32] |= 1UL << (gReadWriteSector->id % 32);
             }
         }
     }
@@ -586,14 +596,23 @@ static u8 GetSaveValidStatus(const struct SaveSectorLocation *locations)
         // No sectors have the correct signature, treat it as empty (fresh flash)
         saveStatus = SAVE_STATUS_EMPTY;
     }
-    else if (validSectorFlags == (1ULL << NUM_SECTORS_PER_SLOT) - 1)  // 64-bit shift for 62 sectors
-    {
-        saveStatus = SAVE_STATUS_OK;
-    }
     else
     {
-        // Some sectors are valid but not all - there's no backup slot to recover from
-        saveStatus = SAVE_STATUS_CORRUPT;
+        allSectorsValid = TRUE;
+        for (i = 0; i < NUM_SECTORS_PER_SLOT; i++)
+        {
+            if (!(validSectorFlags[i / 32] & (1UL << (i % 32))))
+            {
+                allSectorsValid = FALSE;
+                break;
+            }
+        }
+
+        if (allSectorsValid)
+            saveStatus = SAVE_STATUS_OK;
+        else
+            // Some sectors are valid but not all - there's no backup slot to recover from
+            saveStatus = SAVE_STATUS_CORRUPT;
     }
 
     if (saveStatus == SAVE_STATUS_OK)
