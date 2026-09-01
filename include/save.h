@@ -21,17 +21,17 @@
 
 #define SECTOR_ID_SAVEBLOCK2          0      // 1 sector
 #define SECTOR_ID_SAVEBLOCK1_START    1
-#define SECTOR_ID_SAVEBLOCK1_END      17   // 17 sectors = 67 KB for multi-region data
-#define SECTOR_ID_PKMN_STORAGE_START  18
-#define SECTOR_ID_PKMN_STORAGE_END   61    // 44 sectors for 72 boxes (~174 KB)
-#define NUM_SECTORS_PER_SLOT         62    // 1 + 17 + 44 sectors; the only save slot
-#define SECTOR_ID_HOF_1              62
-#define SECTOR_ID_HOF_2              63
-#define SECTOR_ID_TRAINER_HILL       64
-#define SECTOR_ID_RECORDED_BATTLE    65
-#define SECTOR_ID_RECORDED_BATTLE_2  66    // struct RecordedBattleSave outgrew one sector once
-                                            // struct Pokemon started growing - see recorded_battle.c
-#define SECTORS_COUNT                67    // 62 save + 5 special sectors (62 sectors/~248 KB reclaimed from the dropped backup slot)
+#define SECTOR_ID_SAVEBLOCK1_END      (SECTOR_ID_SAVEBLOCK1_START + 17 - 1)     // 17 sectors = 67 KB for multi-region data
+#define SECTOR_ID_PKMN_STORAGE_START  (SECTOR_ID_SAVEBLOCK1_END + 1)
+#define SECTOR_ID_PKMN_STORAGE_END    (SECTOR_ID_PKMN_STORAGE_START + 70 - 1)   // 70 sectors for 72 boxes at 128 B/mon (~276 KB)
+#define NUM_SECTORS_PER_SLOT          (SECTOR_ID_PKMN_STORAGE_END + 1)          // 1 + 17 + 70 sectors; the only save slot
+#define SECTOR_ID_HOF_1               NUM_SECTORS_PER_SLOT
+#define SECTOR_ID_HOF_2               (SECTOR_ID_HOF_1 + 1)
+#define SECTOR_ID_TRAINER_HILL        (SECTOR_ID_HOF_1 + 2)
+#define SECTOR_ID_RECORDED_BATTLE     (SECTOR_ID_HOF_1 + 3)
+#define SECTOR_ID_RECORDED_BATTLE_2   (SECTOR_ID_HOF_1 + 4)    // struct RecordedBattleSave outgrew one sector once
+                                                                 // struct Pokemon started growing - see recorded_battle.c
+#define SECTORS_COUNT                 (SECTOR_ID_HOF_1 + 5)    // save slot + 5 special sectors
 
 #define NUM_HOF_SECTORS 2
 

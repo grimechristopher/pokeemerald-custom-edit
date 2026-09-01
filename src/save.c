@@ -28,17 +28,17 @@ static void CopyFromSaveBlock3(u32, struct SaveSector *);
 /*
  * Sector Layout:
  *
- * Sectors 0 - 61:      The single save slot (SaveBlock2, SaveBlock1, PC storage)
- * Sectors 62 - 63:     Hall of Fame
- * Sector 64:           Trainer Hill
- * Sector 65:           Recorded Battle
+ * Sectors 0 - 87:      The single save slot (SaveBlock2, SaveBlock1, PC storage)
+ * Sectors 88 - 89:     Hall of Fame
+ * Sector 90:           Trainer Hill
+ * Sectors 91 - 92:     Recorded Battle
  *
  * There is only one save slot for the player's game data - the redundant backup
  * copy stock Emerald keeps (to fall back on if the primary is found corrupt on
  * load) has been removed to reclaim flash space for PC storage/SaveBlock1. This
  * means a write interrupted mid-flash (power loss, bad shutdown) has nothing to
  * fall back to. We still rotate the sectors within the slot on every save
- * (gLastWrittenSector) to spread wear across flash cells, since all 62 sectors
+ * (gLastWrittenSector) to spread wear across flash cells, since all 88 sectors
  * get rewritten on every save anyway.
  *
  * See SECTOR_ID_* constants in save.h
@@ -68,9 +68,22 @@ struct
     SAVEBLOCK_CHUNK(struct SaveBlock1, 0), // SECTOR_ID_SAVEBLOCK1_START
     SAVEBLOCK_CHUNK(struct SaveBlock1, 1),
     SAVEBLOCK_CHUNK(struct SaveBlock1, 2),
-    SAVEBLOCK_CHUNK(struct SaveBlock1, 3), // SECTOR_ID_SAVEBLOCK1_END
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 3),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 4),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 5),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 6),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 7),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 8),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 9),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 10),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 11),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 12),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 13),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 14),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 15),
+    SAVEBLOCK_CHUNK(struct SaveBlock1, 16), // SECTOR_ID_SAVEBLOCK1_END
 
-    SAVEBLOCK_CHUNK(struct PokemonStorage, 0), // SECTOR_ID_PKMN_STORAGE_START - 72 boxes across 44 sectors
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 0), // SECTOR_ID_PKMN_STORAGE_START - 72 boxes across 70 sectors
     SAVEBLOCK_CHUNK(struct PokemonStorage, 1),
     SAVEBLOCK_CHUNK(struct PokemonStorage, 2),
     SAVEBLOCK_CHUNK(struct PokemonStorage, 3),
@@ -113,7 +126,33 @@ struct
     SAVEBLOCK_CHUNK(struct PokemonStorage, 40),
     SAVEBLOCK_CHUNK(struct PokemonStorage, 41),
     SAVEBLOCK_CHUNK(struct PokemonStorage, 42),
-    SAVEBLOCK_CHUNK(struct PokemonStorage, 43), // SECTOR_ID_PKMN_STORAGE_END
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 43),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 44),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 45),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 46),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 47),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 48),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 49),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 50),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 51),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 52),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 53),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 54),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 55),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 56),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 57),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 58),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 59),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 60),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 61),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 62),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 63),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 64),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 65),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 66),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 67),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 68),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 69), // SECTOR_ID_PKMN_STORAGE_END
 };
 
 // These will produce an error if a save struct is larger than the space
