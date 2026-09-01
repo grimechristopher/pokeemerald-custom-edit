@@ -767,3 +767,12 @@ TEST("Scale is stored and round-trips through Get/SetMonData")
     SetMonData(&mon, MON_DATA_SCALE, &scale);
     EXPECT_EQ(GetMonData(&mon, MON_DATA_SCALE), 200);
 }
+
+TEST("Met location supports values beyond one region's 256")
+{
+    struct Pokemon mon;
+    u32 metLocation = 40000; // out of u8 range, must survive as u16
+    CreateMon(&mon, SPECIES_WOBBUFFET, 50, 0x11111111, OTID_STRUCT_PRESET(0x22222222));
+    SetMonData(&mon, MON_DATA_MET_LOCATION, &metLocation);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_MET_LOCATION), 40000);
+}

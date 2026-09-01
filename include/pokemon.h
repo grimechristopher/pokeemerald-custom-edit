@@ -188,7 +188,8 @@ struct PokemonSubstruct2
 struct PokemonSubstruct3
 {
     u8 pokerus;
-    u8 metLocation;
+    u16 metLocation; // Widened from u8 (256) - one region alone was already tight;
+                      // a multi-region world needs real headroom here.
     u16 metLevel:7;
     u16 metGame:4;
     u16 dynamaxLevel:4;
