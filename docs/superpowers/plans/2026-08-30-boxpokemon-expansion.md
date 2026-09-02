@@ -15,6 +15,44 @@
 
 ---
 
+## Progress (updated 2026-09-02)
+
+Tasks 0-10 are committed. Task 11 (full verification) is blocked on `mgba-rom-test-hydra`
+hanging indefinitely in this environment (confirmed: killed after 15+ min with worker CPU
+time flatlined, not just slow) - struct-size guards were instead verified via throwaway
+compile-time `_Static_assert` probes (no emulator needed), not the real `TEST()` runner.
+Flag this gap rather than treating the static-assert checks as equivalent to a real test pass.
+
+Two blockers came up building Task 9 that neither this plan nor its "zero changes to
+src/trade.c" architecture claim anticipated, both fixed and committed separately from
+Task 9's own commit:
+
+- **PC-storage sector budget gap**: Task 4's 70-sector budget only covered the
+  `boxes[][]` array (276,480 B), not the rest of `struct PokemonStorage` (box
+  names/wallpapers/etc, ~1.3 KB) - real size (277,796 B) exceeded it by 36 B. Fixed
+  by bumping to 71 sectors. Final: `SECTORS_COUNT` = 94 (was the plan's predicted 93),
+  `NUM_SECTORS_PER_SLOT` = 89, still comfortably under the 128-sector hardware ceiling.
+- **`HEAP_SIZE` too small**: `MoveSaveBlocks_ResetHeap()`'s simultaneous scratch copies of
+  `SaveBlock2 + SaveBlock1 + PokemonStorage` (302,168 B combined) exceeded the 256 KB
+  heap by ~40 KB. Grown to 320 KB (`0x50000`).
+- **Link trade buffer too small**: `trade.c` stages party-pair data into a fixed 256-byte
+  `gBlockSendBuffer` before sending - `2 * sizeof(struct Pokemon)` grew from 200 B to 296 B.
+  Grew `BLOCK_BUFFER_SIZE` to 320 B and added `BLOCK_REQ_SIZE_296`, mirroring the existing
+  220-byte mail-transfer pattern rather than restructuring the send/receive state machine.
+  This also silently fixes an identical, compiler-unflagged overread in `battle_main.c`'s
+  link-battle party exchange (same buffer, same `sizeof(struct Pokemon) * 2` pattern).
+
+Also notable: Task 10's `BoxPokemon` size estimate (121 bytes pre-task, needing a
+`reserved[7]` tail to reach 128) didn't match the real compiler's layout - it was
+already exactly 128 bytes after Task 9, with zero slack. No `reserved` field was added;
+`STATIC_ASSERT(sizeof(struct BoxPokemon) == 128, ...)` locks the real layout instead.
+
+Not yet done: Task 11's remaining scoped `TEST()` runs (blocked on the hydra hang above),
+and this plan's own architecture-doc paragraph claiming zero `trade.c` changes should be
+corrected to match what actually shipped.
+
+---
+
 ## File Structure
 
 | File | Responsibility |
