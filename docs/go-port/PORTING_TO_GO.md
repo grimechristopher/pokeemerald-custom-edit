@@ -14,6 +14,16 @@ TinyGo's experimental GBA backend as the target entirely; it's not needed here.
    Go: real packages, real types, real error handling, C-isms removed — *without*
    changing behavior, using Stage 1 as the parity baseline.
 
+**End-state requirement: zero C.** Not "C game logic wrapped in a Go shell" —
+every line of C (and the one hand-tuned assembly mixer) is expected to end up as
+Go, with no residual C toolchain, no cgo, no linked C library, in the finished
+product. This is stronger than the earlier draft of this doc assumed, and it
+rules out one of the two backend options below outright — see
+[Dependency policy](#dependency-policy-zero-c). "Ugly, C-shaped Go" from Stage 1
+still satisfies this (it's real Go, no C compiler involved to build or run it);
+it's Stage 2's job to make it idiomatic, not to finish converting it — that
+conversion is done by the time Stage 1 exists.
+
 ## Precedent: pokeemerald-multiplatform
 
 [gradenGnostic/pokeemerald-multiplatform](https://github.com/gradenGnostic/pokeemerald-multiplatform)
@@ -35,6 +45,65 @@ already proven to work for this exact codebase.** The Go port should copy that
 split, not invent a new one — replace the same seam (REG_* register access, the
 m4a mixer, SDL2/keypad input) with a Go equivalent, and treat everything on the
 logic side of that seam as a straightforward translation target.
+
+## Keeping in sync with upstream
+
+This repo already tracks the target directly — `git remote -v` shows an
+`upstream` remote at `rh-hideout/pokeemerald-expansion`, and local `master` is
+currently 203 commits behind it. The goal here isn't a one-time snapshot port:
+it's a Go codebase that keeps tracking upstream — the base ROM plus the
+community's ongoing edits — as it continues shipping new Pokémon, moves,
+trainers, features, and fixes. That's a real constraint on *how* Stage 1 gets
+built, not just what it produces once.
+
+### Why "one-time port" and "stays in sync" pull against each other
+
+A hand-translated Go file has no mechanical relationship back to the C file it
+came from. The next upstream commit touching that C file has no way to
+propagate to it. Multiply that by ~1,100 source files and every future upstream
+release becomes a manual re-diff-and-reapply exercise across a codebase that's
+no longer even in the same language — precisely the kind of drift that makes
+ports go stale and get abandoned within a year.
+
+### The fix: separate generated code from hand-written code, from day one
+
+Treat this the way any project with a codegen step does (protobuf, sqlc,
+`modernc.org/sqlite` itself): a hard line between code that's **regenerated
+wholesale from upstream C on every sync** and code that's **hand-written once**
+and never touched by the generator.
+
+| Regenerate on every sync | Hand-write once, wrap the generated layer |
+|---|---|
+| Data tables (species/moves/items/abilities/trainers/encounters/maps/text) — mechanical, low-risk to regenerate | Hardware seam (`ppu`/`apu`/`input`/`save`/`bios`) — no C equivalent exists to regenerate from |
+| Script bytecode data (battle scripts, event scripts) — mechanical | Stage 2 idiomatic refactors, but only for logic that's genuinely stable upstream (RNG, core stat/damage formula shape) |
+| Game logic run through the ccgo/cxgo pass, kept in a clearly marked generated package per subsystem | Anything Stage 2 substantially restructures — accepted case-by-case as needing manual re-merge on upstream changes, not a default |
+
+Concretely: on each sync, re-run the generator pipeline (data-table extraction +
+ccgo/cxgo for logic) against the new upstream tree, diff the regenerated output
+against what's committed, and hand-reconcile only what didn't transpile cleanly
+(new macros, new hardware touches). This is the same workflow
+`modernc.org/sqlite` uses to track upstream SQLite releases automatically —
+directly relevant here since it's the same tool.
+
+### What this means for Stage 2
+
+Stage 2's idiomatic cleanup is exactly the thing that breaks regeneration for
+whatever it touches — that's the real cost of Stage 2, not just engineering
+time. Fine to pay for subsystems upstream rarely touches (the RNG algorithm,
+core formula shapes). Expensive for subsystems upstream changes constantly
+(species/move/trainer/encounter data, new move effects) — those should stay
+behind the generated/regenerable seam even after Stage 2 lands elsewhere, or
+Stage 2 should target a *wrapper* layer around the generated data rather than
+replacing the data layer itself. Worth deciding per-subsystem, not by a single
+blanket rule, when Stage 2 planning actually starts.
+
+### Practical sync cadence
+
+Upstream ships versioned releases (this repo's own `INSTALL.md` documents the
+update path: 1.6.2 → 1.7.4 → 1.8.3 → 1.9.4 → 1.10.3). Syncing on that same
+cadence — re-run generators against each tagged release, run the ported test
+suite to catch behavioral drift, hand-fix whatever didn't transpile — is a
+sustainable rhythm, rather than chasing every individual upstream commit.
 
 ## Stage 1: one-to-one port
 
@@ -58,24 +127,54 @@ translation, not redesign.
 
 ### Rendering/audio backend choice
 
-Two real options; recommend the first:
+**Ebitengine, decided — not just recommended.** The "zero C" end-state rules out
+the alternative:
 
-- **Ebitengine (recommended).** Pure Go, no cgo, single static binary — closest
-  fit to "just Go executables." Cross-compiles to Windows/Linux/macOS from one
-  codebase, and already has first-class Android/iOS (via `gomobile`) and
-  browser/WASM support, which covers the same platform list pokeemerald-
-  multiplatform targets (plus more) without needing a parallel Gradle/NDK build
-  path. Downside: pokeemerald-multiplatform's SDL2 code (aspect-ratio math,
-  audio-timing fixes) can only be used as a *reference*, not reused directly.
-- **go-sdl2 (cgo bindings to real SDL2).** Closer to the precedent project —
-  its rendering/scaling math and audio backend choices translate almost
-  line-for-line. Trade-off: cgo build (slower cross-compilation, needs SDL2
-  present at build/runtime on each target, less "just a Go binary").
+- **Ebitengine.** Pure Go, no cgo, single static binary — required by the
+  zero-C policy. Cross-compiles to Windows/Linux/macOS from one codebase, and
+  already has first-class Android/iOS (via `gomobile`) and browser/WASM support,
+  covering the same platform list pokeemerald-multiplatform targets (plus more)
+  without a parallel Gradle/NDK build path. Trade-off: pokeemerald-multiplatform's
+  SDL2 code (aspect-ratio math, audio-timing fixes) can only be used as a
+  *reference* to reimplement against, not reused directly.
+- ~~go-sdl2 (cgo bindings to real SDL2)~~ — **rejected.** It's the closer match
+  to the precedent project's own code — its rendering/scaling math and audio
+  backend choices would translate almost line-for-line — but it links a real C
+  library through cgo by definition. That's exactly the dependency the zero-C
+  end state rules out, so it's not on the table regardless of how much easier a
+  first pass it would be.
 
-Either works; Ebitengine is the better fit for the stated goal ("just go
-executables," multiplatform including mobile) and is what the rest of this doc
-assumes, but this is worth locking in explicitly before writing the PPU package,
-since it shapes everything downstream.
+### Dependency policy: zero C
+
+The Ebitengine-over-go-sdl2 call above is one instance of a general rule for the
+whole Stage 1 dependency list, not a one-off: **every third-party Go package
+pulled in must be pure Go (no cgo, no linked C library, no C build step).**
+Concretely, watch for this when picking libraries for anything the C original
+handled through a C library or its own hand-written C:
+
+- Audio decoding (music/SFX sample data) — use pure-Go decoders (e.g.
+  `hajimehoshi/go-mp3`, `jfreymuth/oggvorbis` — both cgo-free, and both already
+  the kind of library Ebitengine's own audio examples use) rather than anything
+  wrapping `libvorbis`/`libmp3lame`/etc.
+- Image decoding for graphics assets — Go's standard `image/png` etc. are
+  already pure Go; no need to reach for `libpng` bindings.
+- Compression, if any assets are compressed at rest — Go's standard `compress/*`
+  packages are pure Go; don't reintroduce `zlib`/cgo equivalents.
+- Ebitengine itself — confirm cgo-free for every actual target platform before
+  committing (it is, via `purego`-based OS bindings on desktop; worth a final
+  check specifically for whatever mobile toolchain gets used, since mobile
+  build paths are where a stray cgo dependency is most likely to sneak back in).
+
+None of this is exotic — it just needs to be a checked constraint when adding a
+dependency, not an assumption, since "port everything to Go" quietly fails if
+the last mile depends on a wrapped C library.
+
+The `tools/` C programs (`gbagfx`, `mid2agb`, `gbafix`, `compresSmol`,
+`patchelf`, etc.) don't need porting at all under this plan — they're part of
+the GBA ROM build pipeline, which the Go executable target doesn't use. They
+stay C for as long as this repo still also builds the GBA ROM for the existing
+`pokeemerald-expansion` audience; they're simply not part of what "zero C"
+applies to, since they never run in the shipped Go binary.
 
 ### Using automated C→Go transpilation to accelerate translation
 
@@ -132,6 +231,77 @@ Unchanged from the earlier pass at this analysis:
   claim instead of an assumption, for both Stage 1 (vs. the C original) and
   Stage 2 (vs. Stage 1).
 
+### Stage 1 package layout
+
+A Go module laid out with the hardware seam isolated into its own packages, and
+the logic side kept close to the existing `src/` grouping so files map back to
+their C originals one-to-one during translation:
+
+```
+go-port/
+  cmd/pokeemerald/        # entrypoint: Ebitengine game loop, ties packages together
+  internal/
+    ppu/                  # virtual PPU: backgrounds, OAM/sprites, palettes, blend/window
+    apu/                  # audio: m4a.c sequencer logic (ported ~1:1) + a new Go mixer
+                           #   replacing m4a_1.s (hand-tuned asm has no literal target)
+    input/                # keypad polling -> Ebitengine input
+    save/                 # save read/write; logical SaveBlock1/2 fields, no sector/flash emulation
+    link/                 # link-cable stub (future networked multiplayer), not implemented Stage 1
+    bios/                 # BIOS/SWI call replacements (VBlankIntrWait etc. -> plain Go calls)
+    battle/               # battle_main, battle_util*, battle_script_commands (VM), battle_ai_*
+    overworld/             # event_object_movement, field_effect, scrcmd (VM), tv, contest, dome...
+    pokemon/                # pokemon.c data model: stats, EVs/IVs, evolution, daycare
+    scripts/                 # battle-script/event-script bytecode data + the two VM interpreters
+    data/                    # generated: species/moves/items/abilities/trainers/encounters/maps/text
+    menu/                    # party_menu, pokedex, easy_chat, slot_machine, pokemon_storage_system...
+    rng/                     # random.c, literal port, call-order preserved
+  assets/                    # go:embed graphics/audio/text extracted from original, converted once
+  test/                       # ported GIVEN/WHEN/SCENE/THEN DSL + a Go-native test runner
+  tools/gen/                   # one-off generators: C headers/json -> Go data, .s scripts -> opcode slices
+```
+
+`internal/ppu`, `internal/apu`, `internal/input`, `internal/save`, `internal/
+link`, and `internal/bios` are the hardware seam (new code, see above); every
+other `internal/*` package is a translation target with a specific C-file group
+it corresponds to, which is what makes it possible to check Stage 1 progress
+file-by-file against the original tree.
+
+### Stage 1 size estimate
+
+Grounded in this checkout's actual line counts (see [Scope](#scope-by-the-numbers-this-checkout))
+and in pokeemerald-multiplatform's own hardware-seam code as a real data point —
+its SDL2/win32/BIOS/DMA/audio-sink layer (excluding the experimental voxel
+renderer, its mod system, and vendored cJSON) is **~220 KB of C, roughly 6-8K
+lines** for three platform backends at once. A single Ebitengine backend should
+land in the same range, not larger.
+
+The dominant swing factor isn't the seam, though — it's **how data tables are
+represented**, since they're over half the codebase by line count:
+
+| Component | Source size | As literal Go source | As embedded assets (recommended) |
+|---|---|---|---|
+| Game logic (`src/*.c`, translated ~1:1) | 506K C lines | ~450-610K Go lines | same |
+| Headers → Go type/const decls | 62K C lines | ~15-30K Go lines (no separate header file needed) | same |
+| Data tables (`src/data/*.h`) | 514K C lines | ~500-550K Go lines (struct literals) | **~5-15K Go lines** (schema + loader; data itself becomes `go:embed`ed JSON/binary, not Go source) |
+| Script bytecode data (`data/*.s`) | 49.8K lines | ~45-55K Go lines (opcode slices) | **~2-5K Go lines** (loader; data becomes an asset) |
+| Hardware seam (new, not translated) | ~6-8K C lines (precedent) | ~5-10K Go lines | same |
+| Test suite (`test/*.c`, DSL) | 99K C lines, 937 files | ~80-100K Go lines | same |
+
+**Totals: ~1.1-1.3M lines of Go if data stays as literal Go source, vs. ~650-800K
+lines of Go code (plus the same data now living in non-code asset files) if data
+is embedded instead.** The earlier recommendation in this doc (data as
+`go:embed`ed JSON, not Go source) is what keeps Stage 1 in the smaller range —
+worth confirming as a decision, since it roughly halves the line count that
+needs writing/reviewing as code, without changing what "one-to-one" means
+behaviorally (the data is still exactly the same data, just not expressed as Go
+struct literals).
+
+Either way, this is **not a number a single effort tackles at once** — it's the
+same order of magnitude as the original C project, which itself represents
+years of decompilation and hacking-community work. The phased order earlier in
+this doc (interpreters and data first, subsystem-by-subsystem with the test
+suite gating each step) is what makes a number this size tractable at all.
+
 ## Stage 2: cleanup pass
 
 Only once Stage 1 passes the ported test suite. Refactor without changing
@@ -176,9 +346,7 @@ as the gate at every step, per the phased order in the previous section.
 
 ## Open questions
 
-- **Ebitengine vs. go-sdl2** for the hardware-seam backend — recommended
-  Ebitengine above, but worth an explicit decision before the PPU package exists,
-  since it's not a cheap thing to change later.
+- ~~Ebitengine vs. go-sdl2~~ — resolved: Ebitengine, per the zero-C policy.
 - **ccgo/cxgo pilot**: worth spending a small trial on one file before assuming
   it's part of the Stage 1 workflow — confirm real time-savings vs. hand-fix cost.
 - Is bit-exact RNG/damage-roll parity with the real ROM required, or is "plays
