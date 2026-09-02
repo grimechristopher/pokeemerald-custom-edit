@@ -318,6 +318,13 @@ struct BoxPokemon
     struct PokemonSubstruct4 substruct4;
 };
 
+// Lands on exactly 128 bytes from the real compiler's own struct/union layout and
+// alignment (verified via arm-none-eabi-gcc, not hand computation) - no explicit
+// reserved padding needed to hit this target, unlike this plan's original estimate.
+// A future inline field that grows BoxPokemon past 128 bytes needs a fresh look at
+// the save's PC-storage sector budget (include/save.h) before it can land.
+STATIC_ASSERT(sizeof(struct BoxPokemon) == 128, BoxPokemonIsExactly128Bytes);
+
 STATIC_ASSERT(SECURE_REGION_BYTES % 4 == 0, BoxPokemonSecureRegionWordAligned);
 
 struct Pokemon

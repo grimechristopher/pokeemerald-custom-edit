@@ -827,3 +827,8 @@ TEST("A mon can hold up to MAX_RIBBONS_PER_MON ribbons, no duplicates, then no m
     EXPECT_EQ(GiveMonRibbon(&mon, 200), FALSE);
     EXPECT_EQ(GetMonData(&mon, MON_DATA_RIBBON_TALLY), MAX_RIBBONS_PER_MON);
 }
+
+TEST("BoxPokemon is exactly 128 bytes")
+{
+    EXPECT_EQ(sizeof(struct BoxPokemon), 128);
+}
