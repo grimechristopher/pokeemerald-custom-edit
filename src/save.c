@@ -152,7 +152,8 @@ struct
     SAVEBLOCK_CHUNK(struct PokemonStorage, 66),
     SAVEBLOCK_CHUNK(struct PokemonStorage, 67),
     SAVEBLOCK_CHUNK(struct PokemonStorage, 68),
-    SAVEBLOCK_CHUNK(struct PokemonStorage, 69), // SECTOR_ID_PKMN_STORAGE_END
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 69),
+    SAVEBLOCK_CHUNK(struct PokemonStorage, 70), // SECTOR_ID_PKMN_STORAGE_END
 };
 
 // These will produce an error if a save struct is larger than the space

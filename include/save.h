@@ -23,8 +23,11 @@
 #define SECTOR_ID_SAVEBLOCK1_START    1
 #define SECTOR_ID_SAVEBLOCK1_END      (SECTOR_ID_SAVEBLOCK1_START + 17 - 1)     // 17 sectors = 67 KB for multi-region data
 #define SECTOR_ID_PKMN_STORAGE_START  (SECTOR_ID_SAVEBLOCK1_END + 1)
-#define SECTOR_ID_PKMN_STORAGE_END    (SECTOR_ID_PKMN_STORAGE_START + 70 - 1)   // 70 sectors for 72 boxes at 128 B/mon (~276 KB)
-#define NUM_SECTORS_PER_SLOT          (SECTOR_ID_PKMN_STORAGE_END + 1)          // 1 + 17 + 70 sectors; the only save slot
+#define SECTOR_ID_PKMN_STORAGE_END    (SECTOR_ID_PKMN_STORAGE_START + 71 - 1)   // 71 sectors - 70 sectors (276,480 B) for the
+                                                                                 // boxes[][] array at 128 B/mon, +1 for the rest
+                                                                                 // of struct PokemonStorage (box names/wallpapers/
+                                                                                 // etc, ~1.3 KB) that 70 alone doesn't cover
+#define NUM_SECTORS_PER_SLOT          (SECTOR_ID_PKMN_STORAGE_END + 1)          // 1 + 17 + 71 sectors; the only save slot
 #define SECTOR_ID_HOF_1               NUM_SECTORS_PER_SLOT
 #define SECTOR_ID_HOF_2               (SECTOR_ID_HOF_1 + 1)
 #define SECTOR_ID_TRAINER_HILL        (SECTOR_ID_HOF_1 + 2)
