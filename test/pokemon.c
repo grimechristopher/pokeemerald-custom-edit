@@ -776,3 +776,13 @@ TEST("Met location supports values beyond one region's 256")
     SetMonData(&mon, MON_DATA_MET_LOCATION, &metLocation);
     EXPECT_EQ(GetMonData(&mon, MON_DATA_MET_LOCATION), 40000);
 }
+
+TEST("Minigame enrollment flag round-trips and defaults false")
+{
+    struct Pokemon mon;
+    u32 enrolled = TRUE;
+    CreateMon(&mon, SPECIES_WOBBUFFET, 50, 0x11111111, OTID_STRUCT_PRESET(0x22222222));
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_IS_ENROLLED_IN_MINIGAME), FALSE);
+    SetMonData(&mon, MON_DATA_IS_ENROLLED_IN_MINIGAME, &enrolled);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_IS_ENROLLED_IN_MINIGAME), TRUE);
+}
