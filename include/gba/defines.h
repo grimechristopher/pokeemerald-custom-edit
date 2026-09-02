@@ -38,7 +38,12 @@
 #define ROM_END 0xA000000
 
 #define EWRAM_START 0x02000000
-#define EWRAM_END   (EWRAM_START + 0x40000)
+// 1 MB - this project's custom EWRAM expansion (see claude_docs/MGBA_EXPANSION_GUIDE.md,
+// SIZE_WORKING_RAM), not stock GBA hardware's 256 KB. Stale at the old 0x40000 value, this
+// under-ranged test_runner.c's heap-corruption check (test/test_runner.c) the moment any
+// EWRAM_DATA - gHeap included - got linked past the first 256 KB, which happens routinely
+// now: a false positive, not real corruption.
+#define EWRAM_END   (EWRAM_START + 0x100000)
 #define IWRAM_START 0x03000000
 #define IWRAM_END   (IWRAM_START + 0x8000)
 
