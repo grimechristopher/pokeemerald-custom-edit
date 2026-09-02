@@ -1075,7 +1075,7 @@ static bool8 BufferTradeParties(void)
         break;
     case 3:
         if (id == 0)
-            RequestLinkData(BLOCK_REQ_SIZE_200);
+            RequestLinkData(BLOCK_REQ_SIZE_296); // 2 * sizeof(struct Pokemon) - was BLOCK_REQ_SIZE_200 at 80 B/mon
         sTradeMenu->bufferPartyState++;
         break;
     case 4:
@@ -1092,7 +1092,7 @@ static bool8 BufferTradeParties(void)
         break;
     case 7:
         if (id == 0)
-            RequestLinkData(BLOCK_REQ_SIZE_200);
+            RequestLinkData(BLOCK_REQ_SIZE_296); // 2 * sizeof(struct Pokemon) - was BLOCK_REQ_SIZE_200 at 80 B/mon
         sTradeMenu->bufferPartyState++;
         break;
     case 8:
@@ -1109,7 +1109,7 @@ static bool8 BufferTradeParties(void)
         break;
     case 11:
         if (id == 0)
-            RequestLinkData(BLOCK_REQ_SIZE_200);
+            RequestLinkData(BLOCK_REQ_SIZE_296); // 2 * sizeof(struct Pokemon) - was BLOCK_REQ_SIZE_200 at 80 B/mon
         sTradeMenu->bufferPartyState++;
         break;
     case 12:

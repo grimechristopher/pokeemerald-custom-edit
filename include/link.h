@@ -6,7 +6,11 @@
 #define CMD_LENGTH 8
 #define QUEUE_CAPACITY 50
 #define OVERWORLD_RECV_QUEUE_MAX 3
-#define BLOCK_BUFFER_SIZE 0x100
+// Was 0x100 (256 B) - grown to fit trade.c's 296-byte party-pair transfer
+// (2 * sizeof(struct Pokemon) at 148 B/mon, up from 80 B). Software buffer only -
+// the real link/RFU hardware transfer is already chunked into CMD_LENGTH pieces
+// looped until `size` bytes move, so this isn't a hardware transfer-unit limit.
+#define BLOCK_BUFFER_SIZE 0x140
 
 #define LINK_SLAVE 0
 #define LINK_MASTER 8
@@ -111,6 +115,7 @@ enum {
     BLOCK_REQ_SIZE_100,
     BLOCK_REQ_SIZE_220,
     BLOCK_REQ_SIZE_40,
+    BLOCK_REQ_SIZE_296, // 2 * sizeof(struct Pokemon) at 148 B/mon - trade.c's party-pair transfer
 };
 
 struct LinkStatus
