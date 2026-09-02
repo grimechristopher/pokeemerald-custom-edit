@@ -2352,6 +2352,15 @@ u32 GetBoxMonData3(struct BoxPokemon *boxMon, s32 field, u8 *data)
         case MON_DATA_IS_ENROLLED_IN_MINIGAME:
             retVal = GetSubstruct3(boxMon)->isEnrolledInMinigame;
             break;
+        case MON_DATA_IS_REVERSE:
+            retVal = boxMon->shadowData.isReverse;
+            break;
+        case MON_DATA_HEART_VALUE:
+            retVal = boxMon->shadowData.heartValue;
+            break;
+        case MON_DATA_HEART_MAX:
+            retVal = boxMon->shadowData.heartMax;
+            break;
         case MON_DATA_DYNAMAX_LEVEL:
             retVal = GetSubstruct3(boxMon)->dynamaxLevel;
             break;
@@ -2800,6 +2809,15 @@ void SetBoxMonData(struct BoxPokemon *boxMon, s32 field, const void *dataArg)
             break;
         case MON_DATA_IS_ENROLLED_IN_MINIGAME:
             SET8(GetSubstruct3(boxMon)->isEnrolledInMinigame);
+            break;
+        case MON_DATA_IS_REVERSE:
+            SET8(boxMon->shadowData.isReverse);
+            break;
+        case MON_DATA_HEART_VALUE:
+            SET16(boxMon->shadowData.heartValue);
+            break;
+        case MON_DATA_HEART_MAX:
+            SET16(boxMon->shadowData.heartMax);
             break;
         case MON_DATA_DYNAMAX_LEVEL:
             SET8(GetSubstruct3(boxMon)->dynamaxLevel);

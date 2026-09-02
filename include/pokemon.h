@@ -127,6 +127,9 @@ enum MonData {
     MON_DATA_EVOLUTION_TRACKER,
     MON_DATA_SCALE,
     MON_DATA_IS_ENROLLED_IN_MINIGAME,
+    MON_DATA_IS_REVERSE,
+    MON_DATA_HEART_VALUE,
+    MON_DATA_HEART_MAX,
 };
 
 struct PokemonSubstruct0
@@ -248,7 +251,19 @@ struct BoxPokemon
 {
     u32 personality;
     u32 otId;
-    u8 nickname[min(10, POKEMON_NAME_LENGTH)];
+    // A Shadow Pokemon can't be nicknamed until purified, so nickname's 10 bytes
+    // double as Shadow Pokemon data when substruct3's isShadow bit is set - an
+    // anonymous union, so every existing `boxMon->nickname` access is unchanged.
+    union
+    {
+        u8 nickname[min(10, POKEMON_NAME_LENGTH)];
+        struct
+        {
+            u8 isReverse;
+            u16 heartValue;
+            u16 heartMax;
+        } shadowData;
+    };
     u8 language:3;
     u8 hiddenNatureModifier:5; // 31 natures.
     u8 isBadEgg:1;

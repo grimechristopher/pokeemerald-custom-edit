@@ -786,3 +786,20 @@ TEST("Minigame enrollment flag round-trips and defaults false")
     SetMonData(&mon, MON_DATA_IS_ENROLLED_IN_MINIGAME, &enrolled);
     EXPECT_EQ(GetMonData(&mon, MON_DATA_IS_ENROLLED_IN_MINIGAME), TRUE);
 }
+
+TEST("Shadow Pokemon data shares nickname's storage and round-trips")
+{
+    struct Pokemon mon;
+    u32 isShadow = TRUE;
+    u32 isReverse = TRUE;
+    u32 heartValue = 3000;
+    u32 heartMax = 8000;
+    CreateMon(&mon, SPECIES_WOBBUFFET, 50, 0x11111111, OTID_STRUCT_PRESET(0x22222222));
+    SetMonData(&mon, MON_DATA_IS_SHADOW, &isShadow);
+    SetMonData(&mon, MON_DATA_IS_REVERSE, &isReverse);
+    SetMonData(&mon, MON_DATA_HEART_VALUE, &heartValue);
+    SetMonData(&mon, MON_DATA_HEART_MAX, &heartMax);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_IS_REVERSE), TRUE);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_HEART_VALUE), 3000);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_HEART_MAX), 8000);
+}
