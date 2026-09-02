@@ -130,6 +130,7 @@ enum MonData {
     MON_DATA_IS_REVERSE,
     MON_DATA_HEART_VALUE,
     MON_DATA_HEART_MAX,
+    MON_DATA_RIBBON_TALLY,
 };
 
 struct PokemonSubstruct0
@@ -247,6 +248,22 @@ struct PokemonSubstruct3
 #define SECURE_REGION_BYTES (sizeof(struct PokemonSubstruct0) + sizeof(struct PokemonSubstruct1) + \
                               sizeof(struct PokemonSubstruct2) + sizeof(struct PokemonSubstruct3))
 
+// The full catalog (real ribbons + marks) is populated by content work, not this
+// layer - this just reserves the id space. RIBBON_NONE (0) is the empty-slot value,
+// matching this codebase's SPECIES_NONE/MOVE_NONE/ITEM_NONE convention.
+enum Ribbon
+{
+    RIBBON_NONE,
+};
+#define RIBBON_CATALOG_CAP 256 // enum Ribbon values must fit in a u8 (ribbonIds' element type)
+#define MAX_RIBBONS_PER_MON 32 // slots per mon, not the catalog size - see docs/superpowers/plans/2026-08-30-boxpokemon-expansion.md
+
+struct PokemonSubstruct4
+{
+    u8 ribbonCount;
+    u8 ribbonIds[MAX_RIBBONS_PER_MON];
+};
+
 struct BoxPokemon
 {
     u32 personality;
@@ -295,6 +312,10 @@ struct BoxPokemon
             struct PokemonSubstruct3 substruct3;
         } named;
     } secure;
+    // Not inside `secure`: ribbons aren't anti-cheat-sensitive, and keeping this out
+    // of the checksummed region means the checksum calculation never needs to change
+    // as the ribbon catalog grows.
+    struct PokemonSubstruct4 substruct4;
 };
 
 STATIC_ASSERT(SECURE_REGION_BYTES % 4 == 0, BoxPokemonSecureRegionWordAligned);
@@ -920,6 +941,10 @@ void BoxMonRestorePP(struct BoxPokemon *boxMon);
 void SetMonPreventsSwitchingString(void);
 void SetWildMonHeldItem(void);
 bool8 IsMonShiny(struct Pokemon *mon);
+bool32 BoxMonHasRibbon(struct BoxPokemon *boxMon, enum Ribbon ribbon);
+bool32 GiveBoxMonRibbon(struct BoxPokemon *boxMon, enum Ribbon ribbon);
+bool32 HasMonRibbon(struct Pokemon *mon, enum Ribbon ribbon);
+bool32 GiveMonRibbon(struct Pokemon *mon, enum Ribbon ribbon);
 const u8 *GetTrainerPartnerName(void);
 void BattleAnimateFrontSprite(struct Sprite *sprite, enum Species species, bool8 noCry, u8 panMode);
 void DoMonFrontSpriteAnimation(struct Sprite *sprite, enum Species species, bool8 noCry, u8 panModeAnimFlag);

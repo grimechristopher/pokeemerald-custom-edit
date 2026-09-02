@@ -1958,6 +1958,11 @@ static ALWAYS_INLINE struct PokemonSubstruct3 *GetSubstruct3(struct BoxPokemon *
     return &boxMon->secure.named.substruct3;
 }
 
+static ALWAYS_INLINE struct PokemonSubstruct4 *GetSubstruct4(struct BoxPokemon *boxMon)
+{
+    return &boxMon->substruct4;
+}
+
 static bool32 IsBadEgg(struct BoxPokemon *boxMon)
 {
     if (boxMon->isBadEgg)
@@ -2327,6 +2332,9 @@ u32 GetBoxMonData3(struct BoxPokemon *boxMon, s32 field, u8 *data)
                        | (substruct3->earthRibbon << 25)
                        | (substruct3->worldRibbon << 26);
             }
+            break;
+        case MON_DATA_RIBBON_TALLY:
+            retVal = GetSubstruct4(boxMon)->ribbonCount;
             break;
         case MON_DATA_HYPER_TRAINED_HP:
             retVal = GetSubstruct1(boxMon)->hyperTrainedHP;
@@ -5486,6 +5494,43 @@ void SetWildMonHeldItem(void)
 bool8 IsMonShiny(struct Pokemon *mon)
 {
     return GetMonData(mon, MON_DATA_IS_SHINY);
+}
+
+bool32 BoxMonHasRibbon(struct BoxPokemon *boxMon, enum Ribbon ribbon)
+{
+    struct PokemonSubstruct4 *substruct4 = GetSubstruct4(boxMon);
+    u32 i;
+
+    for (i = 0; i < substruct4->ribbonCount; i++)
+    {
+        if (substruct4->ribbonIds[i] == ribbon)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+bool32 GiveBoxMonRibbon(struct BoxPokemon *boxMon, enum Ribbon ribbon)
+{
+    struct PokemonSubstruct4 *substruct4 = GetSubstruct4(boxMon);
+
+    if (BoxMonHasRibbon(boxMon, ribbon))
+        return FALSE;
+    if (substruct4->ribbonCount >= MAX_RIBBONS_PER_MON)
+        return FALSE;
+
+    substruct4->ribbonIds[substruct4->ribbonCount] = ribbon;
+    substruct4->ribbonCount++;
+    return TRUE;
+}
+
+bool32 HasMonRibbon(struct Pokemon *mon, enum Ribbon ribbon)
+{
+    return BoxMonHasRibbon(&mon->box, ribbon);
+}
+
+bool32 GiveMonRibbon(struct Pokemon *mon, enum Ribbon ribbon)
+{
+    return GiveBoxMonRibbon(&mon->box, ribbon);
 }
 
 const u8 *GetTrainerPartnerName(void)

@@ -803,3 +803,27 @@ TEST("Shadow Pokemon data shares nickname's storage and round-trips")
     EXPECT_EQ(GetMonData(&mon, MON_DATA_HEART_VALUE), 3000);
     EXPECT_EQ(GetMonData(&mon, MON_DATA_HEART_MAX), 8000);
 }
+
+TEST("A mon can hold up to MAX_RIBBONS_PER_MON ribbons, no duplicates, then no more")
+{
+    struct Pokemon mon;
+    CreateMon(&mon, SPECIES_WOBBUFFET, 50, 0x11111111, OTID_STRUCT_PRESET(0x22222222));
+
+    EXPECT_EQ(HasMonRibbon(&mon, 5), FALSE);
+    EXPECT_EQ(GiveMonRibbon(&mon, 5), TRUE);
+    EXPECT_EQ(HasMonRibbon(&mon, 5), TRUE);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_RIBBON_TALLY), 1);
+
+    // Giving the same ribbon twice does not add a second entry.
+    EXPECT_EQ(GiveMonRibbon(&mon, 5), FALSE);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_RIBBON_TALLY), 1);
+
+    // Fill every remaining slot with distinct ribbons.
+    for (u32 i = 6; i < 6 + (MAX_RIBBONS_PER_MON - 1); i++)
+        EXPECT_EQ(GiveMonRibbon(&mon, i), TRUE);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_RIBBON_TALLY), MAX_RIBBONS_PER_MON);
+
+    // The catalog is full - one more ribbon is rejected, not silently dropped.
+    EXPECT_EQ(GiveMonRibbon(&mon, 200), FALSE);
+    EXPECT_EQ(GetMonData(&mon, MON_DATA_RIBBON_TALLY), MAX_RIBBONS_PER_MON);
+}
