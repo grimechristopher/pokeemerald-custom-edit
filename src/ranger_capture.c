@@ -295,12 +295,12 @@ static const struct OamData sRingOamData =
     .bpp = ST_OAM_4BPP,
     .shape = SPRITE_SHAPE(64x64),
     .x = 0,
-    .matrixNum = 0,
     .size = SPRITE_SIZE(64x64),
     .tileNum = 0,
+    // Intentionally 0, unlike the mirrored template's priority 2 - this screen's own
+    // BG is priority 0, so the ring needs priority 0 to draw in front of it.
     .priority = 0,
     .paletteNum = 0,
-    .affineParam = 0,
 };
 
 // Minimal affine-anim table so CreateSprite can allocate an OAM affine matrix
@@ -1018,9 +1018,10 @@ static void DoExit(u8 taskId)
         // RANGER_CAPTURE_IDLE the next time it launches the minigame.
         gRangerCaptureState = RANGER_CAPTURE_IDLE;
 
-        DestroySprite(&gSprites[sRanger->ringSpriteId]);
-        FreeSpriteTilesByTag(RING_TILE_TAG);
-        FreeSpritePaletteByTag(RING_PAL_TAG);
+        // Affine mode means CreateSprite allocated one of the 32 OAM affine matrix
+        // slots for this sprite - DestroySprite alone won't release it, so use the
+        // combined helper (frees tiles/palette/matrix by the sprite's own template tags).
+        DestroySpriteAndFreeResources(&gSprites[sRanger->ringSpriteId]);
 
         Free(sRanger);
         sRanger = NULL;
@@ -1029,9 +1030,9 @@ static void DoExit(u8 taskId)
         return;
     }
 
-    DestroySprite(&gSprites[sRanger->ringSpriteId]);
-    FreeSpriteTilesByTag(RING_TILE_TAG);
-    FreeSpritePaletteByTag(RING_PAL_TAG);
+    // See the scripted branch above for why the combined helper is needed here
+    // instead of a plain DestroySprite.
+    DestroySpriteAndFreeResources(&gSprites[sRanger->ringSpriteId]);
 
     Free(sRanger);
     sRanger = NULL;

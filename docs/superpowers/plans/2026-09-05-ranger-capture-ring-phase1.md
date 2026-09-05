@@ -156,10 +156,13 @@ In `DoSetupGfx` (`src/ranger_capture.c`), after the existing `ShowBg(0);` call a
 In `DoExit` (`src/ranger_capture.c`), before the existing `Free(sRanger);` call in BOTH the scripted and battle-mode branches, add:
 
 ```c
+    FreeSpriteOamMatrix(&gSprites[sRanger->ringSpriteId]);
     DestroySprite(&gSprites[sRanger->ringSpriteId]);
     FreeSpriteTilesByTag(RING_TILE_TAG);
     FreeSpritePaletteByTag(RING_PAL_TAG);
 ```
+
+The `FreeSpriteOamMatrix` call is required because the ring uses `ST_OAM_AFFINE_DOUBLE`, which makes `CreateSprite` allocate one of the GBA's 32 total OAM affine matrix slots for it — `DestroySprite` alone does not release that matrix, and this screen returns straight into an ongoing battle's callback with no intervening `ResetSpriteData()` to reclaim it otherwise, so skipping this leaks a scarce hardware resource on every normal use.
 
 **Step 5: Stub the sprite callback (fixed scale for now, animated scale comes in Task 3)**
 
