@@ -1,66 +1,67 @@
-# Ranger-Style Styler Capture Minigame Design
+# Ranger Capture Styler Extensions Design
 
-**Goal:** A beat/rhythm-based capture minigame, in the spirit of the Pokémon Ranger games, usable as a special-case alternative to a normal battle+Poké Ball capture for scripted encounters (boss-style legendaries, sidequests, "Ranger Station" events, etc.).
+> **Revision note:** This spec originally designed a from-scratch minigame before discovering `src/ranger_capture.c` already exists (823 lines, committed `c536bcdfa2`) — a complete, working DDR-style rhythm minigame wired into the ball-throw battle flow via `ITEM_CAPTURE_STYLER` (`B_RANGER_CAPTURE` config, on by default). This revision keeps that implementation as the base and designs three additions on top of it instead of a parallel system.
+
+**Goal:** Extend the existing Ranger Capture minigame with three additions: attack/obstacle notes (the target fights back), level-based difficulty scaling, and a standalone scripted-encounter trigger that runs the minigame as an alternative to a battle entirely (not a modification of the battle engine).
 
 **Explicitly out of scope for this pass:**
-- Replacing or altering normal wild encounters/battling in any way. Nothing about the default catch flow changes.
-- Species/flag-driven auto-triggering from the wild encounter tables. Triggering is scripted-event-only (see Trigger below); table-driven triggering is a possible future follow-up, not part of this design.
-- Magikarp Jump-style forms/minigame (separate idea, shelved for now, no dependency here).
-- New sprite/creature art. The target Pokémon is represented by its existing icon/portrait; no new art is authored as part of this work.
-- Multiplayer/link support (unlike `pokemon_jump.c`, which is link-aware).
-- A global config flag gating this feature on/off. It's opt-in per script call (an author only gets it by using the new script commands), not a behavior switch on existing systems, so no config define is needed.
+- Any change to the battle turn/action-selection engine (`HandleTurnActionSelectionState` and friends). The scripted trigger is a standalone screen, not a way to auto-play a battle turn — that path was considered and rejected as disproportionate surgery on the project's most complex, most bug-prone subsystem for what should be an alternative to a battle.
+- Changing how `ITEM_CAPTURE_STYLER` behaves when thrown in a normal battle. That entry point is untouched except for gaining the two gameplay extensions (attack notes, level scaling) via the shared core.
+- New sprite/tile art. Everything continues to use the existing solid-color tile approach already in `sRangerBgTiles`.
+- Magikarp Jump wild-encounter work (separate spec, tracked independently).
 
 ---
 
-## Trigger & scripting API
+## Architecture: split the existing file into a shared core + two entry points
 
-Mirrors the existing `setwildbattle` / `dowildbattle` pair (`src/scrcmd.c`, `data/script_cmd_table.inc`):
+Today, `RangerCapture_Init` (`src/ranger_capture.c`) and its state machine read battle globals directly (`gBattlerTarget`, `gBattleMons[gBattlerTarget]`) both to compute difficulty and, in `battle_script_commands.c`, to hand over the caught mon. To support a standalone (non-battle) entry point without duplicating ~800 lines, the difficulty inputs are extracted into a plain struct the core no longer sources from globals itself:
 
-- **`setstylercapture SPECIES LEVEL`** — stages a scripted mon the same way `CreateScriptedWildMon` does for `setwildbattle` (species/level, default IVs/nature/moves). No double-encounter variant.
-- **`dostylercapture`** — starts the minigame: `StartStylerCapture(CB2_ReturnToField)`, following `BattleSetup_StartScriptedWildBattle`'s pattern of swapping in a dedicated `CB2`/task-driven mode and calling `ScriptContext_Stop()` until it returns.
-- On return to the map, `VAR_RESULT` is set to `STYLER_RESULT_CAUGHT` or `STYLER_RESULT_FAILED` so the calling script can branch (`if.compare VAR_RESULT ...`), exactly like scripts already branch on `gBattleOutcome`-derived results after `dowildbattle`.
+```c
+struct RangerCaptureParams {
+    u32 catchRate;
+    u8  level;
+    bool8 isAsleep;
+    bool8 isFrozen;
+    bool8 isLowHp;    // < 25% max HP
+};
+```
 
-Both new commands are added to `data/script_cmd_table.inc` alongside the existing wild-battle entries and get constants generated into `include/constants/script_commands.h` via the normal `make_scr_cmd_constants.py` pipeline — no manual constant-numbering.
+- **`CalculateDifficulty`** changes signature to `CalculateDifficulty(struct RangerCaptureParams *params)` and reads fields from it instead of `gBattleMons[gBattlerTarget]` directly. Its existing tiering logic (catch-rate → loopsNeeded/speed/maxMisses, easier when asleep/frozen/low-HP) is unchanged, just re-pointed at the struct.
+- **Battle entry point** (existing behavior, `battle_script_commands.c`'s ball-throw handling is unchanged): a thin wrapper builds the params from `gBattleMons[gBattlerTarget]` before calling into the shared init, exactly reproducing today's values.
+- **Standalone entry point** (new): builds params from a staged species/level with `isAsleep`/`isFrozen`/`isLowHp` all `FALSE` (a scripted encounter's target isn't already mid-battle-afflicted) — a deliberate simplification, not a gap, since there's no live battle mon to read status from.
 
-## Core gameplay loop
+A `u8 resultMode` field (`RANGER_RESULT_MODE_BATTLE` / `RANGER_RESULT_MODE_SCRIPTED`) stored on `struct RangerCapture` tells `DoExit` which of the two finish paths below to take. Everything else in the state machine (`DoSetupGfx`, `DoCountdown`, `DoPlaying`, `DoSuccessAnim`, `DoFailAnim`, `DoFadeOut`) is shared, unmodified control flow.
 
-A dedicated full-screen minigame (own BG setup + task-based state machine), following the `src/pokemon_jump.c` / `src/mining_minigame.c` convention rather than hooking into the battle engine (a battle-engine hook was considered and rejected — the battle state machine, AI, and turn order aren't built to host an unrelated minigame mid-turn, and bending it to do so would be far more invasive than a standalone screen).
+## Extension 1: Attack/obstacle notes
 
-**On-screen elements** (existing UI primitives only — no new creature art):
-- The target's existing icon/portrait.
-- A beat bar (visual metronome).
-- A capture gauge (fills toward capture).
-- A styler-energy meter (drains toward failure).
+A new note kind representing the target fighting back mid-loop. `struct RangerNote` gains a `kind` field (`NOTE_KIND_NORMAL` / `NOTE_KIND_ATTACK`), rendered with a distinct tile/color so it reads as different at a glance.
 
-**Loop:**
-1. Intro/countdown, reusing `minigame_countdown.h` like the other minigames do.
-2. A repeating beat plays at a tempo set by difficulty (see below).
-3. **Normal beat:** press A on-beat → gauge fills by a fixed amount. Miss → energy drains by a fixed amount.
-4. **Attack beat** (a periodic, distinctly-cued beat): a directional input is required instead of A, standing in for dodging the Pokémon's attack. Missing it drains energy by *more* than a normal miss.
-5. **Capture:** gauge reaches full → immediate success. No secondary catch-rate RNG roll is made — filling the gauge *is* the catch, matching how capture works in the actual Ranger games (loop count fills the target's capture rings, no separate ball-throw-style probability check).
-6. **Failure:** energy reaches zero → the styler "breaks," the encounter ends in failure. No fainting, no consumed items, no other side effect — the Pokémon simply isn't caught.
+- **Spawning:** `SpawnNote` gains a difficulty-scaled chance to spawn an attack note instead of normal (a new `attackNoteChance` percentage set in `CalculateDifficulty` — higher for tougher/lower-catch-rate targets, consistent with the existing "harder target = more of X" pattern already used for loop count/speed/miss allowance).
+- **Correct play is the opposite of a normal note:** pressing the matching D-pad direction while an attack note occupies the hit zone means getting hit — a harsher penalty than a normal miss (bigger `loopProgress` loss and/or an extra miss count), reusing `HandleInput`'s existing nearest-note lookup but branching on `kind` once a note is found.
+- **Letting it pass is correct:** in `UpdateNotes`, a normal note reaching `LANE_END_COL` unhandled is today's miss; an attack note reaching `LANE_END_COL` unhandled is a successful dodge — no penalty, small `loopProgress` credit for landing it cleanly.
 
-## Difficulty scaling
+## Extension 2: Level scaling
 
-Derived once at start-up from the staged mon's `catchRate` (`include/pokemon.h`'s `struct BaseStats.catchRate` field, same source `setwildbattle`'s catch odds ultimately trace back to) and level:
+`CalculateDifficulty` currently scales off catch rate plus in-battle easing (asleep/frozen, low HP) but never looks at level. Add a level-based adjustment to `noteSpeed` (the single "how fast/hard" dial the rest of the function already funnels into), applied after the catch-rate tier is picked and before the existing eases: higher-level targets nudge `noteSpeed` down (faster notes, matching the direction lower catch rate already pushes it), clamped so it never drops below the tier's existing floor. This keeps level as a modifier on the same difficulty axis rather than a second independent system.
 
-- Lower `catchRate` and/or higher level → larger gauge-fill requirement, faster beat tempo, higher energy-drain-per-miss, and more frequent attack beats.
-- These four axes are derived from a single difficulty formula (not four independently-invented constants) so a hack author only reasons about one effective "difficulty" dial per Pokémon; exact curve/tuning constants are worked out during implementation and testing, not fixed in this spec.
+## Extension 3: Standalone scripted trigger
 
-## Capture resolution
+Mirrors `setwildbattle`/`dowildbattle` (`src/scrcmd.c`, `data/script_cmd_table.inc`) exactly, per the original design:
 
-On success, the newly-caught mon is handed to the player through the **same post-catch pipeline a thrown Poké Ball already uses** — nickname prompt, Pokédex registration, sent to PC if the party is full — rather than a second, parallel implementation of "give player a Pokémon." This is a reuse point to identify precisely during implementation (the code path invoked after a successful catch in the battle engine) so the minigame calls into it directly instead of duplicating its behavior.
+- **`setstylercapture SPECIES LEVEL`** — stages species/level in two static file-scope variables (no live `struct Pokemon`/party slot needed until a successful capture).
+- **`dostylercapture`** — calls the new standalone entry point, which runs the *exact same* rhythm-game state machine as the battle path (with the extensions above included), just started with params built from the staged species/level and `isAsleep`/`isFrozen`/`isLowHp` all false.
+- **On success**, the standalone exit path builds the mon (`CreateMonWithIVs` + `GiveMonInitialMoveset`, mirroring `CreateScriptedWildMon`) and calls `GiveScriptedMonToPlayer(&mon, PARTY_SIZE)` — the same non-battle "give player a Pokémon" pipeline `ScriptGiveMon`/egg hatching/the Game Corner gacha already use, handling party-vs-PC placement and Pokédex seen/caught flags. **On failure**, nothing happens beyond ending the encounter (no fainting, no consumed resources).
+- **Returning to the script:** `SetMainCallback2(CB2_ReturnToFieldContinueScriptPlayMapMusic)` (the same callback `dowildbattle` returns through), after stashing the outcome in a static. A new `special`, `GetStylerCaptureOutcome`, returns it — registered in `data/specials.inc` — so a calling script reads the result the same way existing scripts already do after `dowildbattle`:
+  ```
+  dostylercapture
+  specialvar VAR_RESULT, GetStylerCaptureOutcome
+  goto_if_eq VAR_RESULT, STYLER_RESULT_CAUGHT, MyScript_Success
+  ```
 
-## Architecture / file plan
-
-- `src/styler_capture.c` + `include/styler_capture.h` — new files, isolated from other systems per the project's "minimally invasive" style guidance.
-- Internal structure follows `pokemon_jump.c`'s conventions: an enum of `FUNC_*` task states (intro → countdown → beat round → win/lose → exit), its own BG layer assignments, its own window(s) for the gauge/meter UI.
-- `src/scrcmd.c` — two new `ScrCmd_setstylercapture` / `ScrCmd_dostylercapture` functions, next to `ScrCmd_setwildbattle` / `ScrCmd_dowildbattle`.
-- `data/script_cmd_table.inc` — two new entries.
-- A small staging struct (mirroring whatever `CreateScriptedWildMon` populates) holds species/level between the `set*` and `do*` calls.
+This is a genuine alternative to a battle — no battle state (`gBattleMons`, `gBattlerTarget`, `gBattleTypeFlags`) is touched or created, and nothing about `HandleTurnActionSelectionState` or any other battle-engine code changes.
 
 ## Testing
 
-- New tests under `test/` exercising the difficulty formula (catch-rate/level → gauge size, tempo, drain rate, attack-beat frequency) as pure functions, decoupled from the task/BG machinery so they don't need the full test-ROM rendering path.
-- Manual verification in mGBA for the actual feel of the beat timing, following this project's existing pattern of hand-tuning minigame feel (there's no automated way to assert "does this feel like Ranger").
-- A minimal map script wiring `setstylercapture` → `dostylercapture` → branch on `VAR_RESULT`, used both as a manual smoke test and as the reference example for how hack authors are expected to call this.
+- Unit tests (`test/` `TEST()` macro, same pattern as `test/fpmath.c`) for `CalculateDifficulty` as a pure function of `struct RangerCaptureParams` — covering the catch-rate tiers, the asleep/frozen/low-HP eases, the new level adjustment, and `attackNoteChance`'s scaling — decoupled from the BG/task machinery.
+- Manual mGBA verification for feel (note timing, attack-note tension, the standalone screen's countdown/win/lose flow) — there's no automated way to assert "does this feel right," consistent with how the existing minigame was itself hand-tuned.
+- A minimal reference map script (`setstylercapture` → `dostylercapture` → branch on `VAR_RESULT`) as both a manual smoke test and the example hack authors copy.
