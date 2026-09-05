@@ -45,6 +45,7 @@
 #include "pokemon_storage_system.h"
 #include "random.h"
 #include "overworld.h"
+#include "ranger_capture.h"
 #include "rotating_tile_puzzle.h"
 #include "rtc.h"
 #include "script.h"
@@ -2546,6 +2547,28 @@ bool8 ScrCmd_dowildbattle(struct ScriptContext *ctx)
     else
         BattleSetup_StartScriptedDoubleWildBattle();
 
+    ScriptContext_Stop();
+
+    return TRUE;
+}
+
+bool8 ScrCmd_setstylercapture(struct ScriptContext *ctx)
+{
+    enum Species species = ScriptReadHalfword(ctx);
+    u8 level = ScriptReadByte(ctx);
+
+    Script_RequestEffects(SCREFF_V1);
+
+    SetStagedStylerCaptureMon(species, level);
+    return FALSE;
+}
+
+bool8 ScrCmd_dostylercapture(struct ScriptContext *ctx)
+{
+    Script_RequestEffects(SCREFF_V1 | SCREFF_HARDWARE);
+
+    LockPlayerFieldControls();
+    SetMainCallback2(RangerCapture_InitStandalone);
     ScriptContext_Stop();
 
     return TRUE;
