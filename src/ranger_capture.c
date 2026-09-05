@@ -18,9 +18,12 @@
 #include "ow_abilities.h"
 #include "sprite.h"
 #include "decompress.h"
+#include "event_object_movement.h"
+#include "field_effect.h"
 #include "constants/songs.h"
 #include "constants/battle.h"
 #include "constants/rgb.h"
+#include "constants/event_objects.h"
 #include "constants/ranger_capture.h"
 #include "gba/io_reg.h"
 #include "ranger_capture.h"
@@ -163,6 +166,8 @@ struct RangerCapture {
     u16 noteSpawnTimer;
     u8  notesSpawnedThisLoop;
     u16 tilemapBuffer[32 * 32];
+    u16 targetSpecies;
+    u8  targetSpriteId;
     u8  ringSpriteId;
     struct RangerNote notes[MAX_NOTES];
 };
@@ -605,6 +610,7 @@ static void CalculateDifficultyForMode(void)
 
     if (sRanger->resultMode == RANGER_RESULT_MODE_SCRIPTED)
     {
+        sRanger->targetSpecies = sStagedStylerSpecies;
         params.catchRate = gSpeciesInfo[sStagedStylerSpecies].catchRate;
         params.level = sStagedStylerLevel;
         // No live battle mon to read status/HP from for a scripted encounter.
@@ -613,6 +619,7 @@ static void CalculateDifficultyForMode(void)
     }
     else
     {
+        sRanger->targetSpecies = gBattleMons[gBattlerTarget].species;
         params.catchRate = gSpeciesInfo[gBattleMons[gBattlerTarget].species].catchRate;
         params.level = gBattleMons[gBattlerTarget].level;
         params.isIncapacitated = (gBattleMons[gBattlerTarget].status1 & STATUS1_INCAPACITATED) != 0;
@@ -857,6 +864,12 @@ static void DoSetupGfx(void)
     }
     sRanger->ringSpriteId = CreateSprite(&sRingSpriteTemplate, 152, 56, 0);
 
+    sRanger->targetSpriteId = CreateObjectGraphicsSprite(
+        sRanger->targetSpecies + OBJ_EVENT_MON,
+        SpriteCallbackDummy,
+        152, 88, 1);
+    gSprites[sRanger->targetSpriteId].oam.priority = 0;
+
     // OBJ_ON/OBJ_1D_MAP added (beyond the original BG-only flags) so the ring sprite
     // actually renders - CreateSprite/LoadCompressedSpriteSheetUsingHeap allocate tiles
     // assuming 1D object mapping, and the object layer is otherwise never enabled.
@@ -1022,6 +1035,11 @@ static void DoExit(u8 taskId)
         // slots for this sprite - DestroySprite alone won't release it, so use the
         // combined helper (frees tiles/palette/matrix by the sprite's own template tags).
         DestroySpriteAndFreeResources(&gSprites[sRanger->ringSpriteId]);
+        {
+            u8 targetPaletteNum = gSprites[sRanger->targetSpriteId].oam.paletteNum;
+            DestroySprite(&gSprites[sRanger->targetSpriteId]);
+            FieldEffectFreePaletteIfUnused(targetPaletteNum);
+        }
 
         Free(sRanger);
         sRanger = NULL;
@@ -1033,6 +1051,11 @@ static void DoExit(u8 taskId)
     // See the scripted branch above for why the combined helper is needed here
     // instead of a plain DestroySprite.
     DestroySpriteAndFreeResources(&gSprites[sRanger->ringSpriteId]);
+    {
+        u8 targetPaletteNum = gSprites[sRanger->targetSpriteId].oam.paletteNum;
+        DestroySprite(&gSprites[sRanger->targetSpriteId]);
+        FieldEffectFreePaletteIfUnused(targetPaletteNum);
+    }
 
     Free(sRanger);
     sRanger = NULL;
