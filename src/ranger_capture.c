@@ -16,12 +16,18 @@
 #include "pokemon.h"
 #include "overworld.h"
 #include "ow_abilities.h"
+#include "sprite.h"
+#include "decompress.h"
 #include "constants/songs.h"
 #include "constants/battle.h"
 #include "constants/rgb.h"
 #include "constants/ranger_capture.h"
 #include "gba/io_reg.h"
 #include "ranger_capture.h"
+
+// Ring sprite graphics (real, existing assets - see src/graphics.c)
+extern const u32 gBattleAnimSpriteGfx_ThinRing[];
+extern const u16 gBattleAnimSpritePal_ThinRing[];
 
 // ---- Layout constants ----
 #define SCREEN_TILE_W  30
@@ -123,6 +129,16 @@
 // Spacing between note spawns (in frames)
 #define NOTE_SPAWN_INTERVAL(spd) ((spd) * 8)
 
+// Sprite palette/tile tags for the capture ring (local to this screen - not shared with battle anims)
+#define RING_TILE_TAG 0xF001
+#define RING_PAL_TAG  0xF001
+
+// Ring shrinks from RING_SCALE_MIN (largest on-screen, loop just started) to
+// RING_SCALE_MAX (smallest/tightest, loop complete). GBA affine scale is an
+// inverse divisor - a SMALLER value here makes the sprite appear LARGER on screen.
+#define RING_SCALE_MIN 0x60
+#define RING_SCALE_MAX 0x180
+
 struct RangerNote {
     u8  lane;
     s16 tileCol;
@@ -147,6 +163,7 @@ struct RangerCapture {
     u16 noteSpawnTimer;
     u8  notesSpawnedThisLoop;
     u16 tilemapBuffer[32 * 32];
+    u8  ringSpriteId;
     struct RangerNote notes[MAX_NOTES];
 };
 
@@ -164,6 +181,7 @@ static u8 sStylerCaptureOutcome;
 static void RangerCapture_VBlankCB(void);
 static void RangerCapture_MainCB(void);
 static void Task_RangerCapture(u8 taskId);
+static void SpriteCB_CaptureRing(struct Sprite *sprite);
 
 // ---- Inline solid-color tile generator ----
 // 4bpp: each byte holds 2 pixels. For color c, byte = c | (c << 4).
@@ -265,6 +283,50 @@ static const u8 sText_Countdown1[]    = _("  1");
 static const u8 sText_Go[]            = _("  GO!");
 static const u8 sText_Caught[]        = _("Caught!");
 static const u8 sText_BrokeFree[]     = _("Broke free!");
+
+// ---- Capture ring sprite ----
+// Mirrors gOamData_AffineDouble_ObjBlend_64x64's shape/size/affine settings
+// (src/data/battle_anim.h) but defined locally to keep this screen self-contained.
+static const struct OamData sRingOamData =
+{
+    .y = 0,
+    .affineMode = ST_OAM_AFFINE_DOUBLE,
+    .objMode = ST_OAM_OBJ_BLEND,
+    .bpp = ST_OAM_4BPP,
+    .shape = SPRITE_SHAPE(64x64),
+    .x = 0,
+    .matrixNum = 0,
+    .size = SPRITE_SIZE(64x64),
+    .tileNum = 0,
+    .priority = 0,
+    .paletteNum = 0,
+    .affineParam = 0,
+};
+
+// Minimal affine-anim table so CreateSprite can allocate an OAM affine matrix
+// (via InitSpriteAffineAnim). Its content is irrelevant - a later task overwrites
+// the matrix every frame directly - but the pointer must be valid.
+static const union AffineAnimCmd sRingAffineAnimCmds[] =
+{
+    AFFINEANIMCMD_FRAME(0x100, 0x100, 0, 0),
+    AFFINEANIMCMD_END,
+};
+
+static const union AffineAnimCmd *const sRingAffineAnimTable[] =
+{
+    sRingAffineAnimCmds,
+};
+
+static const struct SpriteTemplate sRingSpriteTemplate =
+{
+    .tileTag = RING_TILE_TAG,
+    .paletteTag = RING_PAL_TAG,
+    .oam = &sRingOamData,
+    .anims = gDummySpriteAnimTable,
+    .images = NULL,
+    .affineAnims = sRingAffineAnimTable,
+    .callback = SpriteCB_CaptureRing,
+};
 
 // ---- VBlank callback ----
 static void RangerCapture_VBlankCB(void)
@@ -780,7 +842,25 @@ static void DoSetupGfx(void)
     CopyBgTilemapBufferToVram(0);
     ShowBg(0);
 
-    SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_MODE_0 | DISPCNT_BG0_ON);
+    {
+        const struct CompressedSpriteSheet ringSheet = {
+            .data = gBattleAnimSpriteGfx_ThinRing,
+            .size = 0x0800,
+            .tag = RING_TILE_TAG,
+        };
+        const struct SpritePalette ringPalette = {
+            .data = gBattleAnimSpritePal_ThinRing,
+            .tag = RING_PAL_TAG,
+        };
+        LoadCompressedSpriteSheetUsingHeap(&ringSheet);
+        LoadSpritePalette(&ringPalette);
+    }
+    sRanger->ringSpriteId = CreateSprite(&sRingSpriteTemplate, 152, 56, 0);
+
+    // OBJ_ON/OBJ_1D_MAP added (beyond the original BG-only flags) so the ring sprite
+    // actually renders - CreateSprite/LoadCompressedSpriteSheetUsingHeap allocate tiles
+    // assuming 1D object mapping, and the object layer is otherwise never enabled.
+    SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_MODE_0 | DISPCNT_BG0_ON | DISPCNT_OBJ_ON | DISPCNT_OBJ_1D_MAP);
     BlendPalettes(PALETTES_ALL, 16, RGB_BLACK);
     BeginNormalPaletteFade(PALETTES_ALL, 0, 16, 0, RGB_BLACK);
 
@@ -938,6 +1018,10 @@ static void DoExit(u8 taskId)
         // RANGER_CAPTURE_IDLE the next time it launches the minigame.
         gRangerCaptureState = RANGER_CAPTURE_IDLE;
 
+        DestroySprite(&gSprites[sRanger->ringSpriteId]);
+        FreeSpriteTilesByTag(RING_TILE_TAG);
+        FreeSpritePaletteByTag(RING_PAL_TAG);
+
         Free(sRanger);
         sRanger = NULL;
         DestroyTask(taskId);
@@ -945,11 +1029,21 @@ static void DoExit(u8 taskId)
         return;
     }
 
+    DestroySprite(&gSprites[sRanger->ringSpriteId]);
+    FreeSpriteTilesByTag(RING_TILE_TAG);
+    FreeSpritePaletteByTag(RING_PAL_TAG);
+
     Free(sRanger);
     sRanger = NULL;
 
     DestroyTask(taskId);
     SetMainCallback2(gRangerCapture_ReturnCallback);
+}
+
+// ---- Capture ring sprite callback ----
+static void SpriteCB_CaptureRing(struct Sprite *sprite)
+{
+    // Placeholder: fixed neutral scale. A later task replaces this with a loopProgress-driven scale.
 }
 
 // ---- Main task ----
