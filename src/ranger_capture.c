@@ -9,6 +9,7 @@
 #include "gpu_regs.h"
 #include "palette.h"
 #include "string_util.h"
+#include "random.h"
 #include "scanline_effect.h"
 #include "menu.h"
 #include "battle.h"
@@ -52,6 +53,10 @@
 #define NOTE_INACTIVE 0
 #define NOTE_ACTIVE   1
 
+// Note kinds
+#define NOTE_KIND_NORMAL 0
+#define NOTE_KIND_ATTACK 1
+
 // Hit result values
 #define HIT_PERFECT 0
 #define HIT_GOOD    1
@@ -88,7 +93,8 @@
 #define TILE_BORDER    7
 #define TILE_METER_ON  8
 #define TILE_METER_OFF 9
-#define TILE_COUNT     10
+#define TILE_NOTE_ATTACK 10
+#define TILE_COUNT     11
 
 // Palette color indices (in BG palette 0)
 #define COL_BLACK     1
@@ -101,6 +107,7 @@
 #define COL_ORANGE    8
 #define COL_METER_ON  9
 #define COL_METER_OFF 10
+#define COL_ATTACK    11
 
 // Notes spawned per loop total (spread across lanes)
 #define NOTES_PER_LOOP_TOTAL (LANE_COUNT * 3)
@@ -118,6 +125,7 @@ struct RangerNote {
     u8  lane;
     s16 tileCol;
     u8  state;
+    u8  kind;
 };
 
 struct RangerCapture {
@@ -171,6 +179,7 @@ static const u32 sRangerBgTiles[TILE_COUNT][8] = {
     [TILE_BORDER]   = SOLID_TILE(COL_ORANGE),
     [TILE_METER_ON] = SOLID_TILE(COL_METER_ON),
     [TILE_METER_OFF]= SOLID_TILE(COL_METER_OFF),
+    [TILE_NOTE_ATTACK] = SOLID_TILE(COL_ATTACK),
 };
 
 // 16-color BG palette (palette slot 0, colors 0..15)
@@ -186,7 +195,7 @@ static const u16 sRangerBgPal[16] = {
     RGB(31, 16, 0),   //  8: COL_ORANGE  (border)
     RGB(31, 28, 0),   //  9: COL_METER_ON
     RGB(8,  8,  8),   // 10: COL_METER_OFF
-    RGB(0,  0,  0),   // 11-15: unused
+    RGB(20, 0, 20),   // 11: COL_ATTACK
     RGB(0,  0,  0),
     RGB(0,  0,  0),
     RGB(0,  0,  0),
@@ -308,8 +317,11 @@ static u8 GetLaneRow(u8 lane)
     }
 }
 
-static u8 GetNoteTile(u8 lane)
+static u8 GetNoteTile(u8 lane, u8 kind)
 {
+    if (kind == NOTE_KIND_ATTACK)
+        return TILE_NOTE_ATTACK;
+
     switch (lane)
     {
     case LANE_UP:    return TILE_NOTE_UP;
@@ -510,7 +522,7 @@ static void CalculateDifficulty(void)
 }
 
 // ---- Note management ----
-static void SpawnNote(u8 lane)
+static void SpawnNote(u8 lane, u8 kind)
 {
     u32 i;
     for (i = 0; i < MAX_NOTES; i++)
@@ -520,6 +532,7 @@ static void SpawnNote(u8 lane)
             sRanger->notes[i].lane    = lane;
             sRanger->notes[i].tileCol = LANE_START_COL;
             sRanger->notes[i].state   = NOTE_ACTIVE;
+            sRanger->notes[i].kind    = kind;
             return;
         }
     }
@@ -537,7 +550,8 @@ static void UpdateNotes(void)
         if (sRanger->notesSpawnedThisLoop < NOTES_PER_LOOP_TOTAL)
         {
             u8 lane = sRanger->notesSpawnedThisLoop % LANE_COUNT;
-            SpawnNote(lane);
+            u8 kind = (Random() % 100 < sRanger->attackNoteChance) ? NOTE_KIND_ATTACK : NOTE_KIND_NORMAL;
+            SpawnNote(lane, kind);
             sRanger->notesSpawnedThisLoop++;
         }
     }
@@ -568,21 +582,33 @@ static void UpdateNotes(void)
 
         if (col > LANE_END_COL)
         {
-            // Missed
             sRanger->notes[i].state = NOTE_INACTIVE;
-            sRanger->missCount++;
-            sRanger->loopProgress -= 15;
-            if (sRanger->loopProgress < 0)
-                sRanger->loopProgress = 0;
-            PrintFeedback(HIT_MISS);
-            sRanger->feedbackTimer = FEEDBACK_DURATION;
-            UpdateLoopMeter();
-            PlaySE(SE_BALL_BOUNCE_4);
+
+            if (sRanger->notes[i].kind == NOTE_KIND_ATTACK)
+            {
+                // Letting an attack note through is correct play - small reward, no penalty.
+                sRanger->loopProgress += 3;
+                if (sRanger->loopProgress > LOOP_PROGRESS_MAX)
+                    sRanger->loopProgress = LOOP_PROGRESS_MAX;
+                UpdateLoopMeter();
+            }
+            else
+            {
+                // Missed
+                sRanger->missCount++;
+                sRanger->loopProgress -= 15;
+                if (sRanger->loopProgress < 0)
+                    sRanger->loopProgress = 0;
+                PrintFeedback(HIT_MISS);
+                sRanger->feedbackTimer = FEEDBACK_DURATION;
+                UpdateLoopMeter();
+                PlaySE(SE_BALL_BOUNCE_4);
+            }
         }
         else
         {
             // Draw at new position
-            u8 noteTile = GetNoteTile(sRanger->notes[i].lane);
+            u8 noteTile = GetNoteTile(sRanger->notes[i].lane, sRanger->notes[i].kind);
             SetTile(col, row,     noteTile);
             SetTile(col, row + 1, noteTile);
         }
@@ -617,22 +643,37 @@ static void HandleInput(void)
     }
 
     u8 hitResult;
+    bool8 consumeNote = FALSE;
 
-    if (bestDelta == 0)
+    if (bestIdx < MAX_NOTES && sRanger->notes[bestIdx].kind == NOTE_KIND_ATTACK && bestDelta <= 2)
+    {
+        // Pressing into the target's counterattack is backwards - that's on you.
+        hitResult = HIT_MISS;
+        consumeNote = TRUE;
+        sRanger->missCount++;
+        sRanger->loopProgress -= 25;
+        if (sRanger->loopProgress < 0)
+            sRanger->loopProgress = 0;
+        PlaySE(SE_BALL_BOUNCE_4);
+    }
+    else if (bestDelta == 0)
     {
         hitResult = HIT_PERFECT;
+        consumeNote = TRUE;
         sRanger->loopProgress += 8;
         PlaySE(SE_SUCCESS);
     }
     else if (bestDelta == 1)
     {
         hitResult = HIT_GOOD;
+        consumeNote = TRUE;
         sRanger->loopProgress += 5;
         PlaySE(SE_SELECT);
     }
     else if (bestDelta == 2)
     {
         hitResult = HIT_OK;
+        consumeNote = TRUE;
         sRanger->loopProgress += 2;
         PlaySE(SE_SELECT);
     }
@@ -648,7 +689,7 @@ static void HandleInput(void)
     }
 
     // Consume the hit note
-    if (hitResult != HIT_MISS && bestIdx < MAX_NOTES)
+    if (consumeNote && bestIdx < MAX_NOTES)
     {
         u8  row = GetLaneRow(pressedLane);
         s16 col = sRanger->notes[bestIdx].tileCol;
