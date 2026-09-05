@@ -267,10 +267,21 @@ static const struct WindowTemplate sRangerWinTemplates[WIN_CNT + 1] = {
         .paletteNum = 15,
         .baseBlock  = 128 + 8 * 3,
     },
+    // tilemapTop=0: the 4 lanes (see GetLaneRow) tightly pack rows 3-18 with no
+    // gaps between them, so rows 0-2 (above the UP lane, to the right of
+    // WIN_TITLE's own columns 0-7) are the only rows in this column range not
+    // owned by a lane's border/background tiles. Placing this window inside
+    // any lane's rows (as it originally was, at row 9 - inside the RIGHT
+    // lane's own block) makes PutWindowTilemap() permanently overwrite that
+    // lane's tiles with the window's, which is blank/black whenever no
+    // feedback text is showing - the pre-existing "solid black rectangle"
+    // rendering bug (unrelated to sprites; DoCountdown() never flushes the
+    // tilemap to VRAM, so the corruption stays invisible until DoPlaying()'s
+    // per-frame CopyBgTilemapBufferToVram(0) starts displaying it).
     [WIN_FEEDBACK] = {
         .bg         = 0,
         .tilemapLeft = 16,
-        .tilemapTop  = 9,
+        .tilemapTop  = 0,
         .width      = 12,
         .height     = 2,
         .paletteNum = 15,
@@ -349,6 +360,15 @@ static void RangerCapture_VBlankCB(void)
 static void RangerCapture_MainCB(void)
 {
     RunTasks();
+    // AnimateSprites()/BuildOamBuffer() are what copy gSprites[]' OAM attributes
+    // (including the position each sprite's x/y is packed into) into
+    // gMain.oamBuffer - the buffer LoadOam() actually DMAs into hardware OAM
+    // every VBlank. Without these, the ring and target sprites created in
+    // DoSetupGfx() are fully populated in gSprites[] but never reach hardware
+    // OAM at all, so they never render (confirmed hidden at every sampled
+    // frame, not just a transient one).
+    AnimateSprites();
+    BuildOamBuffer();
     UpdatePaletteFade();
 }
 
