@@ -30,6 +30,14 @@ Vanilla Gen 3 renders proper nouns in ALL CAPS ("POKéMON", "TRAINER", a charact
 
 Since upstream's own decap branch is only partially done (map dialogue converted A–Z is nowhere near finished there), this fork instead extracted the editorial decisions from [Prof. Harpe's ~99%-complete decap of pokeemerald-expansion](https://github.com/prof-harpe/pokeemerald-expansion) and replayed them against this tree as `[bracket]` tags — roughly 5,500 spans across 375 files, covering the bulk of battle text, menus, contest text, the HGSS Dex, and map dialogue across the full alphabet. Not literally everything: content this fork added since (Game Corner minigames, Magikarp Jump, etc.) predates none of that work and isn't covered, and a conservative extraction process deliberately skipped any change that looked like more than a pure recase rather than risk corrupting it.
 
+# 🚧 This Fork's Custom Additions
+
+Beyond the deviations above, this fork has its own in-progress feature work layered on top of `pokeemerald-expansion`:
+
+- **8-directional overworld movement (`OW_DIAGONAL_MOVEMENT`).** The player and NPCs can move diagonally, matching Gen 6+, instead of being locked to the four cardinal directions. Covers input handling, no-corner-cutting collision, Bikes/Surf/Dive, ledges and arrow warps resolving like stairs, wandering NPCs, and followers. On by default; see `include/config/overworld.h`. Design/implementation history in `docs/superpowers/specs/` and `docs/superpowers/plans/` (`2026-09-02-diagonal-movement-*`).
+- **Ranger-style Capture Styler (`B_RANGER_CAPTURE`).** A new item, `ITEM_CAPTURE_STYLER`, that swaps the usual RNG-based catch odds for a DDR-style rhythm minigame (`src/ranger_capture.c`) when thrown in a wild battle — hit notes in one of four lanes in time with the target to fill a loop-progress meter before running out of misses. Difficulty (loops needed, note speed, miss allowance) scales off the target's catch rate and status. On by default.
+- **Magikarp Jump pattern forms.** All 31 cosmetic Magikarp/Gyarados color patterns from *Pokémon: Magikarp Jump* exist as real species (62 total) with working evolution and Mega Evolution, accessible today in debug mode. They currently render with placeholder (standard Magikarp/Gyarados) graphics pending custom sprites — see `MAGIKARP_JUMP_IMPLEMENTATION_SUMMARY.md` and `MAGIKARP_JUMP_GRAPHICS_GUIDE.md` for status and next steps.
+
 # [Features](FEATURES.md)
 
 **`pokeemerald-expansion`** offers hundreds of features from various [core series Pokémon games](https://bulbapedia.bulbagarden.net/wiki/Core_series), along with popular quality-of-life enhancements designed to streamline development and improve the player experience. A full list of those features can be found in [`FEATURES.md`](FEATURES.md).
