@@ -917,6 +917,7 @@ static void DoExit(u8 taskId)
         if (gRangerCaptureState == RANGER_CAPTURE_SUCCESS)
         {
             struct Pokemon mon;
+            u8 giveResult;
             u32 personality = GetMonPersonality(sStagedStylerSpecies,
                 GetSynchronizedGender(STATIC_WILDMON_ORIGIN, sStagedStylerSpecies),
                 GetSynchronizedNature(STATIC_WILDMON_ORIGIN, sStagedStylerSpecies),
@@ -924,8 +925,8 @@ static void DoExit(u8 taskId)
 
             CreateMonWithIVs(&mon, sStagedStylerSpecies, sStagedStylerLevel, personality, OTID_STRUCT_PLAYER_ID, USE_RANDOM_IVS);
             GiveMonInitialMoveset(&mon);
-            GiveScriptedMonToPlayer(&mon, PARTY_SIZE);
-            sStylerCaptureOutcome = STYLER_RESULT_CAUGHT;
+            giveResult = GiveScriptedMonToPlayer(&mon, PARTY_SIZE);
+            sStylerCaptureOutcome = (giveResult != MON_CANT_GIVE) ? STYLER_RESULT_CAUGHT : STYLER_RESULT_FAILED;
         }
         else
         {
