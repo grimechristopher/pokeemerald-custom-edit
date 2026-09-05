@@ -139,7 +139,11 @@ extern const u16 gBattleAnimSpritePal_ThinRing[];
 // Ring shrinks from RING_SCALE_MIN (largest on-screen, loop just started) to
 // RING_SCALE_MAX (smallest/tightest, loop complete). GBA affine scale is an
 // inverse divisor - a SMALLER value here makes the sprite appear LARGER on screen.
-#define RING_SCALE_MIN 0x60
+// 0x80 is the established-safe floor for this 64x64 double-affine sprite/mode
+// (see gThinRingShrinkingAffineAnimCmds in src/battle_anim_effects_2.c) - going
+// lower makes the apparent size exceed the double-affine's 128px bounding box,
+// clipping the ring.
+#define RING_SCALE_MIN 0x80
 #define RING_SCALE_MAX 0x180
 
 struct RangerNote {
@@ -1067,7 +1071,15 @@ static void DoExit(u8 taskId)
 // ---- Capture ring sprite callback ----
 static void SpriteCB_CaptureRing(struct Sprite *sprite)
 {
-    // Placeholder: fixed neutral scale. A later task replaces this with a loopProgress-driven scale.
+    struct ObjAffineSrcData affineSrc;
+    struct OamMatrix matrix;
+    u16 scale = RING_SCALE_MIN + ((RING_SCALE_MAX - RING_SCALE_MIN) * sRanger->loopProgress) / LOOP_PROGRESS_MAX;
+
+    affineSrc.xScale = scale;
+    affineSrc.yScale = scale;
+    affineSrc.rotation = 0;
+    ObjAffineSet(&affineSrc, &matrix, 1, 2);
+    SetOamMatrix(sprite->oam.matrixNum, matrix.a, matrix.b, matrix.c, matrix.d);
 }
 
 // ---- Main task ----
