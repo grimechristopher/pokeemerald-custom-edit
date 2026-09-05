@@ -775,6 +775,7 @@ git commit -m "Add a standalone (non-battle) entry point to Ranger Capture"
 - Modify: `src/scrcmd.c`
 - Modify: `data/script_cmd_table.inc`
 - Modify: `data/specials.inc`
+- Modify: `asm/macros/event.inc` (adds `.macro setstylercapture`/`.macro dostylercapture`, mirroring the existing `setwildbattle`/`dowildbattle` macros — omitted from this plan's original file list, caught by code review: without it the new opcodes exist but no `.inc` script can actually invoke them, since the mnemonic-to-bytes expansion for every script command lives in this file)
 
 - [ ] **Step 1: Add the include**
 
