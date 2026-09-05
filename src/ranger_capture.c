@@ -127,6 +127,7 @@ struct RangerCapture {
     u8  maxMisses;
     u8  missCount;
     u8  noteSpeed;
+    u8  attackNoteChance;
     u8  moveTimer;
     u16 countdownTimer;
     s16 loopProgress;
@@ -493,43 +494,19 @@ struct RangerDifficulty ComputeRangerCaptureDifficulty(struct RangerCaptureParam
 
 static void CalculateDifficulty(void)
 {
-    u32 catchRate = gSpeciesInfo[gBattleMons[gBattlerTarget].species].catchRate;
-    u8 speed;
+    struct RangerCaptureParams params = {0};
+    struct RangerDifficulty diff;
 
-    if (catchRate >= 150)
-    {
-        sRanger->loopsNeeded = 3;
-        speed = 6;
-        sRanger->maxMisses = 5;
-    }
-    else if (catchRate >= 100)
-    {
-        sRanger->loopsNeeded = 4;
-        speed = 5;
-        sRanger->maxMisses = 4;
-    }
-    else if (catchRate >= 45)
-    {
-        sRanger->loopsNeeded = 5;
-        speed = 4;
-        sRanger->maxMisses = 3;
-    }
-    else
-    {
-        sRanger->loopsNeeded = 6;
-        speed = 3;
-        sRanger->maxMisses = 2;
-    }
+    params.catchRate = gSpeciesInfo[gBattleMons[gBattlerTarget].species].catchRate;
+    params.level = gBattleMons[gBattlerTarget].level;
+    params.isIncapacitated = (gBattleMons[gBattlerTarget].status1 & STATUS1_INCAPACITATED) != 0;
+    params.isLowHp = gBattleMons[gBattlerTarget].hp * 4 < gBattleMons[gBattlerTarget].maxHP;
 
-    // Easier if asleep/frozen
-    if (gBattleMons[gBattlerTarget].status1 & STATUS1_INCAPACITATED)
-        speed++;
-
-    // Easier if low HP
-    if (gBattleMons[gBattlerTarget].hp * 4 < gBattleMons[gBattlerTarget].maxHP)
-        speed++;
-
-    sRanger->noteSpeed = speed;
+    diff = ComputeRangerCaptureDifficulty(params);
+    sRanger->loopsNeeded = diff.loopsNeeded;
+    sRanger->noteSpeed = diff.noteSpeed;
+    sRanger->maxMisses = diff.maxMisses;
+    sRanger->attackNoteChance = diff.attackNoteChance;
 }
 
 // ---- Note management ----
