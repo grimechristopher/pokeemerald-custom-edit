@@ -16,6 +16,7 @@
 #include "constants/songs.h"
 #include "constants/battle.h"
 #include "constants/rgb.h"
+#include "constants/ranger_capture.h"
 #include "gba/io_reg.h"
 #include "ranger_capture.h"
 
@@ -439,6 +440,57 @@ static void ClearFeedback(void)
 }
 
 // ---- Difficulty calculation ----
+
+struct RangerDifficulty ComputeRangerCaptureDifficulty(struct RangerCaptureParams params)
+{
+    struct RangerDifficulty diff;
+
+    if (params.catchRate >= 150)
+    {
+        diff.loopsNeeded = 3;
+        diff.noteSpeed = 6;
+        diff.maxMisses = 5;
+        diff.attackNoteChance = 10;
+    }
+    else if (params.catchRate >= 100)
+    {
+        diff.loopsNeeded = 4;
+        diff.noteSpeed = 5;
+        diff.maxMisses = 4;
+        diff.attackNoteChance = 20;
+    }
+    else if (params.catchRate >= 45)
+    {
+        diff.loopsNeeded = 5;
+        diff.noteSpeed = 4;
+        diff.maxMisses = 3;
+        diff.attackNoteChance = 30;
+    }
+    else
+    {
+        diff.loopsNeeded = 6;
+        diff.noteSpeed = 3;
+        diff.maxMisses = 2;
+        diff.attackNoteChance = 40;
+    }
+
+    // Higher-level targets push the tempo up, same direction a lower catch rate does.
+    if (params.level >= 50 && diff.noteSpeed > 3)
+        diff.noteSpeed--;
+    if (params.level >= 80 && diff.noteSpeed > 3)
+        diff.noteSpeed--;
+
+    // Easier if asleep/frozen
+    if (params.isIncapacitated)
+        diff.noteSpeed++;
+
+    // Easier if low HP
+    if (params.isLowHp)
+        diff.noteSpeed++;
+
+    return diff;
+}
+
 static void CalculateDifficulty(void)
 {
     u32 catchRate = gSpeciesInfo[gBattleMons[gBattlerTarget].species].catchRate;
