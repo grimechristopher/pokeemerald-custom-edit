@@ -2,12 +2,17 @@
 #define GUARD_RANGER_CAPTURE_H
 
 #include "main.h"
+#include "constants/species.h"
 
 // Minigame result states (stored in gRangerCaptureState)
 #define RANGER_CAPTURE_IDLE     0
 #define RANGER_CAPTURE_RUNNING  1
 #define RANGER_CAPTURE_SUCCESS  2
 #define RANGER_CAPTURE_FAIL     3
+
+// Which caller started the minigame, and therefore how DoExit hands off its result
+#define RANGER_RESULT_MODE_BATTLE   0
+#define RANGER_RESULT_MODE_SCRIPTED 1
 
 struct RangerCaptureParams
 {
@@ -31,5 +36,8 @@ extern u8 gRangerCaptureState;
 extern MainCallback gRangerCapture_ReturnCallback;
 
 void RangerCapture_Init(void);
+void RangerCapture_InitStandalone(void);
+void SetStagedStylerCaptureMon(enum Species species, u8 level);
+u8 GetStylerCaptureOutcome(void);
 
 #endif // GUARD_RANGER_CAPTURE_H

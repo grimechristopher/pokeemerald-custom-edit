@@ -14,6 +14,8 @@
 #include "menu.h"
 #include "battle.h"
 #include "pokemon.h"
+#include "overworld.h"
+#include "ow_abilities.h"
 #include "constants/songs.h"
 #include "constants/battle.h"
 #include "constants/rgb.h"
@@ -130,6 +132,7 @@ struct RangerNote {
 
 struct RangerCapture {
     u8  rstate;
+    u8  resultMode;
     u8  loopsNeeded;
     u8  loopsCompleted;
     u8  maxMisses;
@@ -152,6 +155,10 @@ u8 gRangerCaptureState;
 MainCallback gRangerCapture_ReturnCallback;
 
 EWRAM_DATA static struct RangerCapture *sRanger = NULL;
+
+static enum Species sStagedStylerSpecies;
+static u8 sStagedStylerLevel;
+static u8 sStylerCaptureOutcome;
 
 // ---- Forward declarations ----
 static void RangerCapture_VBlankCB(void);
@@ -275,7 +282,7 @@ static void RangerCapture_MainCB(void)
 }
 
 // ---- Entry point called by SetMainCallback2 ----
-void RangerCapture_Init(void)
+static void RangerCapture_InitCommon(u8 resultMode)
 {
     SetVBlankCallback(NULL);
     ResetTasks();
@@ -285,6 +292,7 @@ void RangerCapture_Init(void)
     ScanlineEffect_Stop();
 
     sRanger = AllocZeroed(sizeof(struct RangerCapture));
+    sRanger->resultMode = resultMode;
 
     SetGpuReg(REG_OFFSET_DISPCNT, 0);
     SetGpuReg(REG_OFFSET_BG0CNT, 0);
@@ -302,6 +310,30 @@ void RangerCapture_Init(void)
 
     SetVBlankCallback(RangerCapture_VBlankCB);
     SetMainCallback2(RangerCapture_MainCB);
+}
+
+void RangerCapture_Init(void)
+{
+    RangerCapture_InitCommon(RANGER_RESULT_MODE_BATTLE);
+}
+
+void RangerCapture_InitStandalone(void)
+{
+    RangerCapture_InitCommon(RANGER_RESULT_MODE_SCRIPTED);
+}
+
+// Must be called before RangerCapture_InitStandalone (i.e. before dostylercapture runs)
+// so the scripted encounter knows which species/level to stage - mirrors setwildbattle's
+// existing contract with its own wild battle command.
+void SetStagedStylerCaptureMon(enum Species species, u8 level)
+{
+    sStagedStylerSpecies = species;
+    sStagedStylerLevel = level;
+}
+
+u8 GetStylerCaptureOutcome(void)
+{
+    return sStylerCaptureOutcome;
 }
 
 // ---- Helpers ----
@@ -504,15 +536,26 @@ struct RangerDifficulty ComputeRangerCaptureDifficulty(struct RangerCaptureParam
     return diff;
 }
 
-static void CalculateDifficulty(void)
+static void CalculateDifficultyForMode(void)
 {
     struct RangerCaptureParams params = {0};
     struct RangerDifficulty diff;
 
-    params.catchRate = gSpeciesInfo[gBattleMons[gBattlerTarget].species].catchRate;
-    params.level = gBattleMons[gBattlerTarget].level;
-    params.isIncapacitated = (gBattleMons[gBattlerTarget].status1 & STATUS1_INCAPACITATED) != 0;
-    params.isLowHp = gBattleMons[gBattlerTarget].hp * 4 < gBattleMons[gBattlerTarget].maxHP;
+    if (sRanger->resultMode == RANGER_RESULT_MODE_SCRIPTED)
+    {
+        params.catchRate = gSpeciesInfo[sStagedStylerSpecies].catchRate;
+        params.level = sStagedStylerLevel;
+        // No live battle mon to read status/HP from for a scripted encounter.
+        params.isIncapacitated = FALSE;
+        params.isLowHp = FALSE;
+    }
+    else
+    {
+        params.catchRate = gSpeciesInfo[gBattleMons[gBattlerTarget].species].catchRate;
+        params.level = gBattleMons[gBattlerTarget].level;
+        params.isIncapacitated = (gBattleMons[gBattlerTarget].status1 & STATUS1_INCAPACITATED) != 0;
+        params.isLowHp = gBattleMons[gBattlerTarget].hp * 4 < gBattleMons[gBattlerTarget].maxHP;
+    }
 
     diff = ComputeRangerCaptureDifficulty(params);
     sRanger->loopsNeeded = diff.loopsNeeded;
@@ -713,7 +756,7 @@ static void HandleInput(void)
 
 static void DoInit(void)
 {
-    CalculateDifficulty();
+    CalculateDifficultyForMode();
     sRanger->rstate = RSTATE_SETUP_GFX;
 }
 
@@ -868,6 +911,38 @@ static void DoExit(u8 taskId)
     FreeAllWindowBuffers();
     HideBg(0);
     ResetBgsAndClearDma3BusyFlags(0);
+
+    if (sRanger->resultMode == RANGER_RESULT_MODE_SCRIPTED)
+    {
+        if (gRangerCaptureState == RANGER_CAPTURE_SUCCESS)
+        {
+            struct Pokemon mon;
+            u32 personality = GetMonPersonality(sStagedStylerSpecies,
+                GetSynchronizedGender(STATIC_WILDMON_ORIGIN, sStagedStylerSpecies),
+                GetSynchronizedNature(STATIC_WILDMON_ORIGIN, sStagedStylerSpecies),
+                RANDOM_UNOWN_LETTER);
+
+            CreateMonWithIVs(&mon, sStagedStylerSpecies, sStagedStylerLevel, personality, OTID_STRUCT_PLAYER_ID, USE_RANDOM_IVS);
+            GiveMonInitialMoveset(&mon);
+            GiveScriptedMonToPlayer(&mon, PARTY_SIZE);
+            sStylerCaptureOutcome = STYLER_RESULT_CAUGHT;
+        }
+        else
+        {
+            sStylerCaptureOutcome = STYLER_RESULT_FAILED;
+        }
+
+        // Only the battle path's caller normally resets this handshake global; since a
+        // scripted run has no such caller, reset it here so the battle path still sees
+        // RANGER_CAPTURE_IDLE the next time it launches the minigame.
+        gRangerCaptureState = RANGER_CAPTURE_IDLE;
+
+        Free(sRanger);
+        sRanger = NULL;
+        DestroyTask(taskId);
+        SetMainCallback2(CB2_ReturnToFieldContinueScriptPlayMapMusic);
+        return;
+    }
 
     Free(sRanger);
     sRanger = NULL;
