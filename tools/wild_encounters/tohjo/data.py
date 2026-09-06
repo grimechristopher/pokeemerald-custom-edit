@@ -43,6 +43,13 @@ ROUTES["MAP_ROUTE1_FRLG"] = {
 # — the route is already thoroughly Johto-flavored via Hoothoot/Noctowl/
 # Spinarak/Ariados, which are native HGSS additions to this exact route, not
 # imports of our own.
+#
+# Day ranking is by combined Morning+Day rate across both HG and SS (raw
+# Bulbapedia wikitext, Northern section): Pidgey 140, Caterpie 62, Weedle 42,
+# Kakuna 40, Butterfree 20 (Morning 10%/Day 10%) vs. Metapod 20 (Morning
+# 20%/Day 0%, a real tie broken in Butterfree's favor since it has an actual
+# nonzero Day rate) vs. Pidgeotto 19 (lowest of the bunch). Metapod and
+# Pidgeotto both fall outside the top 5.
 ROUTES["MAP_ROUTE2_FRLG"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute2",
@@ -51,7 +58,7 @@ ROUTES["MAP_ROUTE2_FRLG"] = {
         "common": [("SPECIES_CATERPIE", 3, 4)],
         "uncommon": [("SPECIES_WEEDLE", 3, 4)],
         "rare": [("SPECIES_KAKUNA", 5, 5)],
-        "very_rare": [("SPECIES_METAPOD", 5, 5)],
+        "very_rare": [("SPECIES_BUTTERFREE", 7, 8)],
     },
     "night": {
         "very_common": [("SPECIES_HOOTHOOT", 3, 5)],
@@ -89,10 +96,14 @@ ROUTES["MAP_ROUTE3_FRLG"] = {
 }
 
 # Route 4: shares Route 3's basic species set (Rattata/Spearow/Jigglypuff/
-# Ekans/Zubat) in HGSS, again leaving one native tier short on both Day and
-# Night. This route runs past Cerulean Cave, so the open very_rare tiers get
-# Johto crossovers themed to that cave's mountainous/psychic-ghost flavor,
-# distinct picks from Route 3 so the two routes don't feel identical.
+# Ekans/Zubat) in HGSS. Day leaves one native tier short (see the crossover
+# below). Night, once Spearow's real combined rate is counted alongside the
+# rest, is fully native across all 6 real candidates (Rattata/Spearow/Zubat/
+# Ekans/Arbok/Jigglypuff) — ranked by combined HG+SS Night rate from raw
+# Bulbapedia wikitext: Rattata 65 (HG 30% + SS 35%), Zubat 30, Spearow 30
+# (HG-only, tie broken behind Zubat), Ekans 20, Jigglypuff 10, Arbok 5
+# (lowest, dropped — the sole open native tier's worth of headroom is used up
+# by adding Spearow, not by a crossover).
 ROUTES["MAP_ROUTE4_FRLG"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute4",
@@ -106,26 +117,29 @@ ROUTES["MAP_ROUTE4_FRLG"] = {
     "night": {
         "very_common": [("SPECIES_RATTATA", 8, 10)],
         "common": [("SPECIES_ZUBAT", 5, 5)],
-        "uncommon": [("SPECIES_EKANS", 8, 8)],
-        "rare": [("SPECIES_JIGGLYPUFF", 6, 6)],
-        "very_rare": [("SPECIES_MISDREAVUS", 8, 10)],  # crossover: Johto import, eerie nocturnal nod to Cerulean Cave's psychic/ghost lore
+        "uncommon": [("SPECIES_SPEAROW", 5, 5)],
+        "rare": [("SPECIES_EKANS", 8, 8)],
+        "very_rare": [("SPECIES_JIGGLYPUFF", 6, 6)],
     },
 }
 
-# Route 5: home to the Kanto Day Care. Native Day data only lists 3 species
-# (Pidgey/Bellsprout/Abra), leaving two tiers open. Night is filled natively
-# once HeartGold's and SoulSilver's tables are combined (SoulSilver adds
-# Meowth). The open Day tiers get an egg-lore homage (Togepi is never wild in
-# HGSS, hence "homage" not "crossover") plus a genuine Johto grassland
-# crossover (Girafarig, native to Johto's Routes 42-44).
+# Route 5: home to the Kanto Day Care. Native Day data, once Morning+Day are
+# combined across HG and SS (raw Bulbapedia wikitext), actually lists 4
+# species — Pidgey 200 (combined HG+SS Morning+Day), Bellsprout 60, Meowth 40
+# (SS-only), Abra 20 — leaving exactly one tier (very_rare) open. Night is
+# filled natively once HeartGold's and SoulSilver's tables are combined
+# (SoulSilver adds Meowth). The single open Day tier gets a genuine Johto
+# grassland crossover (Girafarig, native to Johto's Routes 42-44); the
+# Togepi homage pick that used to sit here was displacing real native data
+# (Meowth) and has been dropped.
 ROUTES["MAP_ROUTE5_FRLG"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute5",
     "day": {
         "very_common": [("SPECIES_PIDGEY", 13, 15)],
         "common": [("SPECIES_BELLSPROUT", 13, 13)],
-        "uncommon": [("SPECIES_ABRA", 12, 14)],
-        "rare": [("SPECIES_TOGEPI", 3, 5)],  # homage, not vanilla-sourced: nod to the Kanto Day Care's egg lore on this route
+        "uncommon": [("SPECIES_MEOWTH", 14, 14)],
+        "rare": [("SPECIES_ABRA", 12, 14)],
         "very_rare": [("SPECIES_GIRAFARIG", 13, 15)],  # crossover: Johto import, native to Johto's open grassland routes
     },
     "night": {
@@ -144,15 +158,15 @@ ROUTES["MAP_ROUTE6_FRLG"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute6",
     "day": {
-        "very_common": [("SPECIES_PIDGEY", 13, 15)],
+        "very_common": [("SPECIES_PIDGEY", 13, 14)],
         "common": [("SPECIES_BELLSPROUT", 13, 13)],
-        "uncommon": [("SPECIES_MEOWTH", 13, 14)],
+        "uncommon": [("SPECIES_MEOWTH", 14, 14)],
         "rare": [("SPECIES_MAGNEMITE", 15, 15)],
         "very_rare": [("SPECIES_ABRA", 12, 14)],
     },
     "night": {
         "very_common": [("SPECIES_ODDISH", 13, 13)],
-        "common": [("SPECIES_MEOWTH", 13, 14)],
+        "common": [("SPECIES_MEOWTH", 13, 13)],
         "uncommon": [("SPECIES_BELLSPROUT", 14, 14)],
         "rare": [("SPECIES_MAGNEMITE", 15, 15)],
         "very_rare": [("SPECIES_ABRA", 12, 14)],
