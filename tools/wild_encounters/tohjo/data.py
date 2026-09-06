@@ -46,10 +46,12 @@ ROUTES["MAP_ROUTE1_FRLG"] = {
 #
 # Day ranking is by combined Morning+Day rate across both HG and SS (raw
 # Bulbapedia wikitext, Northern section): Pidgey 140, Caterpie 62, Weedle 42,
-# Kakuna 40, Butterfree 20 (Morning 10%/Day 10%) vs. Metapod 20 (Morning
+# Kakuna 40, Ledyba 34 (SS-only: Morning 30% at level 3 + Day 4% at level 10),
+# Butterfree 20 (HG-only: Morning 10%/Day 10%) tied with Metapod 20 (Morning
 # 20%/Day 0%, a real tie broken in Butterfree's favor since it has an actual
-# nonzero Day rate) vs. Pidgeotto 19 (lowest of the bunch). Metapod and
-# Pidgeotto both fall outside the top 5.
+# nonzero Day rate) vs. Pidgeotto 19 (lowest of the bunch). Ledyba outranks
+# all of these and takes the very_rare slot; Butterfree, Metapod, and
+# Pidgeotto all fall outside the top 5.
 ROUTES["MAP_ROUTE2_FRLG"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute2",
@@ -58,7 +60,7 @@ ROUTES["MAP_ROUTE2_FRLG"] = {
         "common": [("SPECIES_CATERPIE", 3, 4)],
         "uncommon": [("SPECIES_WEEDLE", 3, 4)],
         "rare": [("SPECIES_KAKUNA", 5, 5)],
-        "very_rare": [("SPECIES_BUTTERFREE", 7, 8)],
+        "very_rare": [("SPECIES_LEDYBA", 3, 10)],
     },
     "night": {
         "very_common": [("SPECIES_HOOTHOOT", 3, 5)],
