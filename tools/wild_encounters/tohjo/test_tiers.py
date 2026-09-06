@@ -84,3 +84,17 @@ def test_derive_evening_falls_back_to_day_uncommon_when_no_night_exclusive_speci
             "very_rare": [("SPECIES_PIDGEY", 2, 2)]}
     evening = derive_evening(same, same)
     assert evening["uncommon"] == same["uncommon"]
+
+
+def test_derive_evening_pads_a_single_night_exclusive_species_to_full_tier():
+    day = {
+        "very_common": [("SPECIES_PIDGEY", 2, 4)],
+        "common": [("SPECIES_RATTATA", 2, 2)],
+        "uncommon": [("SPECIES_SENTRET", 3, 3)],
+        "rare": [("SPECIES_FURRET", 6, 6)],
+        "very_rare": [("SPECIES_PIDGEY", 2, 4)],
+    }
+    night = dict(day)
+    night["common"] = [("SPECIES_HOOTHOOT", 2, 4)]  # only one species not present anywhere in day
+    evening = derive_evening(day, night)
+    assert evening["uncommon"] == [("SPECIES_HOOTHOOT", 2, 4), ("SPECIES_HOOTHOOT", 2, 4)]

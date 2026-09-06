@@ -74,11 +74,7 @@ def derive_evening(day_tiers, night_tiers):
     evening = dict(day_tiers)
     if night_exclusive:
         picked = night_exclusive[:TIER_SLOT_COUNTS["uncommon"]]
-        if len(picked) == 1:
-            evening["uncommon"] = picked
-        else:
-            # pad/truncate to exactly the uncommon slot count
-            while len(picked) < TIER_SLOT_COUNTS["uncommon"]:
-                picked.append(picked[-1])
-            evening["uncommon"] = picked[:TIER_SLOT_COUNTS["uncommon"]]
+        while len(picked) < TIER_SLOT_COUNTS["uncommon"]:
+            picked.append(picked[-1])
+        evening["uncommon"] = picked
     return evening
