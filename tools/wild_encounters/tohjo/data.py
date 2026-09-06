@@ -16,7 +16,7 @@ that HGSS never puts in the wild anywhere near here) are marked
 
 ROUTES = {}
 
-ROUTES["MAP_ROUTE1_FRLG"] = {
+ROUTES["MAP_ROUTE1"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute1",
     "day": {
@@ -52,7 +52,7 @@ ROUTES["MAP_ROUTE1_FRLG"] = {
 # nonzero Day rate) vs. Pidgeotto 19 (lowest of the bunch). Ledyba outranks
 # all of these and takes the very_rare slot; Butterfree, Metapod, and
 # Pidgeotto all fall outside the top 5.
-ROUTES["MAP_ROUTE2_FRLG"] = {
+ROUTES["MAP_ROUTE2"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute2",
     "day": {
@@ -78,7 +78,7 @@ ROUTES["MAP_ROUTE2_FRLG"] = {
 # that level, so it is dropped rather than treated as a genuine wild
 # encounter). The resulting open very_rare tiers get baby-Pokemon Johto
 # crossovers that nod at Mt. Moon's Clefairy/Moon Stone lore just ahead.
-ROUTES["MAP_ROUTE3_FRLG"] = {
+ROUTES["MAP_ROUTE3"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute3",
     "day": {
@@ -106,7 +106,7 @@ ROUTES["MAP_ROUTE3_FRLG"] = {
 # (HG-only, tie broken behind Zubat), Ekans 20, Jigglypuff 10, Arbok 5
 # (lowest, dropped — the sole open native tier's worth of headroom is used up
 # by adding Spearow, not by a crossover).
-ROUTES["MAP_ROUTE4_FRLG"] = {
+ROUTES["MAP_ROUTE4"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute4",
     "day": {
@@ -134,7 +134,7 @@ ROUTES["MAP_ROUTE4_FRLG"] = {
 # grassland crossover (Girafarig, native to Johto's Routes 42-44); the
 # Togepi homage pick that used to sit here was displacing real native data
 # (Meowth) and has been dropped.
-ROUTES["MAP_ROUTE5_FRLG"] = {
+ROUTES["MAP_ROUTE5"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute5",
     "day": {
@@ -156,7 +156,7 @@ ROUTES["MAP_ROUTE5_FRLG"] = {
 # Route 6: shares Route 5's basic table shape. Combining HeartGold's
 # Magnemite slot with SoulSilver's Meowth slot fills all 5 native tiers for
 # both Day and Night, so no open tier remains for a crossover pick here.
-ROUTES["MAP_ROUTE6_FRLG"] = {
+ROUTES["MAP_ROUTE6"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute6",
     "day": {
