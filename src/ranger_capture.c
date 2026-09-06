@@ -39,23 +39,19 @@ extern const u16 gBattleAnimSpritePal_ThinRing[];
 // Left info panel: tile columns 0-7
 #define PANEL_LEFT_W   8
 
-// Lane area: tile columns 8-27
+// Reel area: tile columns 8-27 (unchanged from the old lane layout)
 #define LANE_START_COL 8
 #define LANE_END_COL   27
 #define HIT_ZONE_COL   26
 
-// Note rows (each lane is 2 tiles tall, with 1-tile borders above/below)
-#define LANE_UP_ROW    4
-#define LANE_RT_ROW    8
-#define LANE_DN_ROW    12
-#define LANE_LT_ROW    16
-
-// Lane indices
-#define LANE_UP    0
-#define LANE_RIGHT 1
-#define LANE_DOWN  2
-#define LANE_LEFT  3
-#define LANE_COUNT 4
+// Single reel row (2 tiles tall, 1-tile borders above/below). Placed at the
+// bottom of the old 4-lane vertical range (rows 3-18) rather than the middle
+// of it, so it doesn't overlap the ring/target sprites, which sit higher on
+// screen around tile rows 7/11 (pixel y=56/88, tuned in Phase 1 via
+// headless-capture - see DoSetupGfx's CreateSprite/CreateObjectGraphicsSprite
+// calls). Reuses the old LANE_LT_ROW value so the play area's bottom edge
+// doesn't move.
+#define REEL_ROW 16
 
 // Max notes on screen
 #define MAX_NOTES  8
@@ -64,9 +60,17 @@ extern const u16 gBattleAnimSpritePal_ThinRing[];
 #define NOTE_INACTIVE 0
 #define NOTE_ACTIVE   1
 
-// Note kinds
-#define NOTE_KIND_NORMAL 0
-#define NOTE_KIND_ATTACK 1
+// Note types - one flat pool instead of the old lane+kind split. SpawnNote
+// picks uniformly among the first NOTE_TYPE_NORMAL_COUNT values; ATTACK is
+// rolled separately at attackNoteChance and isn't bound to any one button.
+#define NOTE_TYPE_UP     0
+#define NOTE_TYPE_DOWN   1
+#define NOTE_TYPE_LEFT   2
+#define NOTE_TYPE_RIGHT  3
+#define NOTE_TYPE_A      4
+#define NOTE_TYPE_B      5
+#define NOTE_TYPE_NORMAL_COUNT 6
+#define NOTE_TYPE_ATTACK 6
 
 // Hit result values
 #define HIT_PERFECT 0
@@ -96,32 +100,37 @@ extern const u16 gBattleAnimSpritePal_ThinRing[];
 // Inline tile indices
 #define TILE_BLACK     0
 #define TILE_LANE_BG   1
-#define TILE_NOTE_UP   2
-#define TILE_NOTE_RT   3
-#define TILE_NOTE_DN   4
-#define TILE_NOTE_LT   5
+#define TILE_NOTE_UP    2
+#define TILE_NOTE_RIGHT 3
+#define TILE_NOTE_DOWN  4
+#define TILE_NOTE_LEFT  5
 #define TILE_HIT_ZONE  6
 #define TILE_BORDER    7
 #define TILE_METER_ON  8
 #define TILE_METER_OFF 9
-#define TILE_NOTE_ATTACK 10
-#define TILE_COUNT     11
+#define TILE_NOTE_A     10
+#define TILE_NOTE_B     11
+#define TILE_NOTE_ATTACK 12
+#define TILE_COUNT     13
 
 // Palette color indices (in BG palette 0)
 #define COL_BLACK     1
 #define COL_DARK_GRAY 2
-#define COL_YELLOW    3
-#define COL_GREEN     4
-#define COL_BLUE      5
-#define COL_RED       6
+#define COL_YELLOW    3   // UP
+#define COL_GREEN     4   // RIGHT
+#define COL_BLUE      5   // DOWN
+#define COL_RED       6   // LEFT
 #define COL_WHITE     7
 #define COL_ORANGE    8
 #define COL_METER_ON  9
 #define COL_METER_OFF 10
 #define COL_ATTACK    11
+#define COL_A         12
+#define COL_B         13
 
-// Notes spawned per loop total (spread across lanes)
-#define NOTES_PER_LOOP_TOTAL (LANE_COUNT * 3)
+// Notes spawned per loop total (same pacing as the old 4-lane version, which
+// spawned 3 per lane * 4 lanes - now just a flat total on the one reel).
+#define NOTES_PER_LOOP_TOTAL 12
 
 // Frame constants
 #define FEEDBACK_DURATION     30
@@ -147,10 +156,9 @@ extern const u16 gBattleAnimSpritePal_ThinRing[];
 #define RING_SCALE_MAX 0x180
 
 struct RangerNote {
-    u8  lane;
+    u8  type;
     s16 tileCol;
     u8  state;
-    u8  kind;
 };
 
 struct RangerCapture {
@@ -203,16 +211,18 @@ static void SpriteCB_CaptureRing(struct Sprite *sprite);
 }
 
 static const u32 sRangerBgTiles[TILE_COUNT][8] = {
-    [TILE_BLACK]    = SOLID_TILE(COL_BLACK),
-    [TILE_LANE_BG]  = SOLID_TILE(COL_DARK_GRAY),
-    [TILE_NOTE_UP]  = SOLID_TILE(COL_YELLOW),
-    [TILE_NOTE_RT]  = SOLID_TILE(COL_GREEN),
-    [TILE_NOTE_DN]  = SOLID_TILE(COL_BLUE),
-    [TILE_NOTE_LT]  = SOLID_TILE(COL_RED),
-    [TILE_HIT_ZONE] = SOLID_TILE(COL_WHITE),
-    [TILE_BORDER]   = SOLID_TILE(COL_ORANGE),
-    [TILE_METER_ON] = SOLID_TILE(COL_METER_ON),
-    [TILE_METER_OFF]= SOLID_TILE(COL_METER_OFF),
+    [TILE_BLACK]      = SOLID_TILE(COL_BLACK),
+    [TILE_LANE_BG]    = SOLID_TILE(COL_DARK_GRAY),
+    [TILE_NOTE_UP]    = SOLID_TILE(COL_YELLOW),
+    [TILE_NOTE_RIGHT] = SOLID_TILE(COL_GREEN),
+    [TILE_NOTE_DOWN]  = SOLID_TILE(COL_BLUE),
+    [TILE_NOTE_LEFT]  = SOLID_TILE(COL_RED),
+    [TILE_HIT_ZONE]   = SOLID_TILE(COL_WHITE),
+    [TILE_BORDER]     = SOLID_TILE(COL_ORANGE),
+    [TILE_METER_ON]   = SOLID_TILE(COL_METER_ON),
+    [TILE_METER_OFF]  = SOLID_TILE(COL_METER_OFF),
+    [TILE_NOTE_A]     = SOLID_TILE(COL_A),
+    [TILE_NOTE_B]     = SOLID_TILE(COL_B),
     [TILE_NOTE_ATTACK] = SOLID_TILE(COL_ATTACK),
 };
 
@@ -230,8 +240,8 @@ static const u16 sRangerBgPal[16] = {
     RGB(31, 28, 0),   //  9: COL_METER_ON
     RGB(8,  8,  8),   // 10: COL_METER_OFF
     RGB(20, 0, 20),   // 11: COL_ATTACK
-    RGB(0,  0,  0),
-    RGB(0,  0,  0),
+    RGB(0,  31, 31),  // 12: COL_A (cyan)
+    RGB(31, 0,  31),  // 13: COL_B (bright magenta - distinct from ATTACK's darker one)
     RGB(0,  0,  0),
     RGB(0,  0,  0),
 };
@@ -267,17 +277,16 @@ static const struct WindowTemplate sRangerWinTemplates[WIN_CNT + 1] = {
         .paletteNum = 15,
         .baseBlock  = 128 + 8 * 3,
     },
-    // tilemapTop=0: the 4 lanes (see GetLaneRow) tightly pack rows 3-18 with no
-    // gaps between them, so rows 0-2 (above the UP lane, to the right of
-    // WIN_TITLE's own columns 0-7) are the only rows in this column range not
-    // owned by a lane's border/background tiles. Placing this window inside
-    // any lane's rows (as it originally was, at row 9 - inside the RIGHT
-    // lane's own block) makes PutWindowTilemap() permanently overwrite that
-    // lane's tiles with the window's, which is blank/black whenever no
-    // feedback text is showing - the pre-existing "solid black rectangle"
-    // rendering bug (unrelated to sprites; DoCountdown() never flushes the
-    // tilemap to VRAM, so the corruption stays invisible until DoPlaying()'s
-    // per-frame CopyBgTilemapBufferToVram(0) starts displaying it).
+    // tilemapTop=0: the single reel (see REEL_ROW) only occupies rows 15-18,
+    // so rows 0-14 in this column range are free of reel border/background
+    // tiles. Placing this window inside the reel's rows (as it originally
+    // was, at row 9 - back when 4 lanes tightly packed rows 3-18) makes
+    // PutWindowTilemap() permanently overwrite the reel's tiles with the
+    // window's, which is blank/black whenever no feedback text is showing -
+    // the pre-existing "solid black rectangle" rendering bug (unrelated to
+    // sprites; DoCountdown() never flushes the tilemap to VRAM, so the
+    // corruption stays invisible until DoPlaying()'s per-frame
+    // CopyBgTilemapBufferToVram(0) starts displaying it).
     [WIN_FEEDBACK] = {
         .bg         = 0,
         .tilemapLeft = 16,
@@ -429,28 +438,17 @@ u8 GetStylerCaptureOutcome(void)
 
 // ---- Helpers ----
 
-static u8 GetLaneRow(u8 lane)
+static u8 GetNoteTile(u8 type)
 {
-    switch (lane)
+    switch (type)
     {
-    case LANE_UP:    return LANE_UP_ROW;
-    case LANE_RIGHT: return LANE_RT_ROW;
-    case LANE_DOWN:  return LANE_DN_ROW;
-    default:         return LANE_LT_ROW;
-    }
-}
-
-static u8 GetNoteTile(u8 lane, u8 kind)
-{
-    if (kind == NOTE_KIND_ATTACK)
-        return TILE_NOTE_ATTACK;
-
-    switch (lane)
-    {
-    case LANE_UP:    return TILE_NOTE_UP;
-    case LANE_RIGHT: return TILE_NOTE_RT;
-    case LANE_DOWN:  return TILE_NOTE_DN;
-    default:         return TILE_NOTE_LT;
+    case NOTE_TYPE_UP:    return TILE_NOTE_UP;
+    case NOTE_TYPE_DOWN:  return TILE_NOTE_DOWN;
+    case NOTE_TYPE_LEFT:  return TILE_NOTE_LEFT;
+    case NOTE_TYPE_RIGHT: return TILE_NOTE_RIGHT;
+    case NOTE_TYPE_A:     return TILE_NOTE_A;
+    case NOTE_TYPE_B:     return TILE_NOTE_B;
+    default:              return TILE_NOTE_ATTACK;
     }
 }
 
@@ -459,7 +457,7 @@ static void SetTile(u8 col, u8 row, u8 tileIdx)
     sRanger->tilemapBuffer[row * 32 + col] = tileIdx;
 }
 
-static u8 LaneRestoreTile(s16 col)
+static u8 ReelRestoreTile(s16 col)
 {
     return (col == HIT_ZONE_COL) ? TILE_HIT_ZONE : TILE_LANE_BG;
 }
@@ -468,7 +466,7 @@ static u8 LaneRestoreTile(s16 col)
 
 static void BuildInitialTilemap(void)
 {
-    u32 r, c, lane;
+    u32 r, c;
 
     // Black background everywhere
     for (r = 0; r < 20; r++)
@@ -480,34 +478,22 @@ static void BuildInitialTilemap(void)
         for (c = 0; c < PANEL_LEFT_W; c++)
             SetTile(c, r, TILE_LANE_BG);
 
-    // Lane rows (4 lanes, each occupying row, row+1 with borders)
-    for (lane = 0; lane < LANE_COUNT; lane++)
+    // Single reel row: top border, 2-row track, bottom border.
+    for (c = LANE_START_COL; c <= LANE_END_COL; c++)
+        SetTile(c, REEL_ROW - 1, TILE_BORDER);
+
+    for (c = LANE_START_COL; c <= LANE_END_COL; c++)
     {
-        u8 row = GetLaneRow(lane);
-
-        // Top border row
-        for (c = LANE_START_COL; c <= LANE_END_COL; c++)
-            SetTile(c, row - 1, TILE_BORDER);
-
-        // 2-row lane background
-        for (c = LANE_START_COL; c <= LANE_END_COL; c++)
-        {
-            SetTile(c, row,     TILE_LANE_BG);
-            SetTile(c, row + 1, TILE_LANE_BG);
-        }
-
-        // Bottom border row
-        for (c = LANE_START_COL; c <= LANE_END_COL; c++)
-            SetTile(c, row + 2, TILE_BORDER);
+        SetTile(c, REEL_ROW,     TILE_LANE_BG);
+        SetTile(c, REEL_ROW + 1, TILE_LANE_BG);
     }
 
-    // Hit zone: white tiles in all lane rows
-    for (lane = 0; lane < LANE_COUNT; lane++)
-    {
-        u8 row = GetLaneRow(lane);
-        SetTile(HIT_ZONE_COL, row,     TILE_HIT_ZONE);
-        SetTile(HIT_ZONE_COL, row + 1, TILE_HIT_ZONE);
-    }
+    for (c = LANE_START_COL; c <= LANE_END_COL; c++)
+        SetTile(c, REEL_ROW + 2, TILE_BORDER);
+
+    // Hit zone
+    SetTile(HIT_ZONE_COL, REEL_ROW,     TILE_HIT_ZONE);
+    SetTile(HIT_ZONE_COL, REEL_ROW + 1, TILE_HIT_ZONE);
 }
 
 // ---- Loop meter (8 tiles wide in left panel, rows 10-11) ----
@@ -658,17 +644,16 @@ static void CalculateDifficultyForMode(void)
 }
 
 // ---- Note management ----
-static void SpawnNote(u8 lane, u8 kind)
+static void SpawnNote(u8 type)
 {
     u32 i;
     for (i = 0; i < MAX_NOTES; i++)
     {
         if (sRanger->notes[i].state == NOTE_INACTIVE)
         {
-            sRanger->notes[i].lane    = lane;
             sRanger->notes[i].tileCol = LANE_START_COL;
             sRanger->notes[i].state   = NOTE_ACTIVE;
-            sRanger->notes[i].kind    = kind;
+            sRanger->notes[i].type    = type;
             return;
         }
     }
@@ -685,9 +670,10 @@ static void UpdateNotes(void)
         sRanger->noteSpawnTimer = 0;
         if (sRanger->notesSpawnedThisLoop < NOTES_PER_LOOP_TOTAL)
         {
-            u8 lane = sRanger->notesSpawnedThisLoop % LANE_COUNT;
-            u8 kind = (Random() % 100 < sRanger->attackNoteChance) ? NOTE_KIND_ATTACK : NOTE_KIND_NORMAL;
-            SpawnNote(lane, kind);
+            u8 type = (Random() % 100 < sRanger->attackNoteChance)
+                ? NOTE_TYPE_ATTACK
+                : (Random() % NOTE_TYPE_NORMAL_COUNT);
+            SpawnNote(type);
             sRanger->notesSpawnedThisLoop++;
         }
     }
@@ -703,14 +689,13 @@ static void UpdateNotes(void)
         if (sRanger->notes[i].state != NOTE_ACTIVE)
             continue;
 
-        u8  row  = GetLaneRow(sRanger->notes[i].lane);
-        s16 col  = sRanger->notes[i].tileCol;
+        s16 col = sRanger->notes[i].tileCol;
 
         // Erase old position
         if (col >= LANE_START_COL && col <= LANE_END_COL)
         {
-            SetTile(col, row,     LaneRestoreTile(col));
-            SetTile(col, row + 1, LaneRestoreTile(col));
+            SetTile(col, REEL_ROW,     ReelRestoreTile(col));
+            SetTile(col, REEL_ROW + 1, ReelRestoreTile(col));
         }
 
         col++;
@@ -720,7 +705,7 @@ static void UpdateNotes(void)
         {
             sRanger->notes[i].state = NOTE_INACTIVE;
 
-            if (sRanger->notes[i].kind == NOTE_KIND_ATTACK)
+            if (sRanger->notes[i].type == NOTE_TYPE_ATTACK)
             {
                 // Letting an attack note through is correct play - small reward, no penalty.
                 sRanger->loopProgress += 3;
@@ -730,11 +715,11 @@ static void UpdateNotes(void)
             }
             else
             {
-                // Missed
+                // Missed - stall the ring by resetting this loop's progress to its
+                // start. loopsCompleted (already-banked loops) is untouched, and
+                // missCount/maxMisses (unchanged below) is still the real fail gate.
                 sRanger->missCount++;
-                sRanger->loopProgress -= 15;
-                if (sRanger->loopProgress < 0)
-                    sRanger->loopProgress = 0;
+                sRanger->loopProgress = 0;
                 PrintFeedback(HIT_MISS);
                 sRanger->feedbackTimer = FEEDBACK_DURATION;
                 UpdateLoopMeter();
@@ -744,9 +729,9 @@ static void UpdateNotes(void)
         else
         {
             // Draw at new position
-            u8 noteTile = GetNoteTile(sRanger->notes[i].lane, sRanger->notes[i].kind);
-            SetTile(col, row,     noteTile);
-            SetTile(col, row + 1, noteTile);
+            u8 noteTile = GetNoteTile(sRanger->notes[i].type);
+            SetTile(col, REEL_ROW,     noteTile);
+            SetTile(col, REEL_ROW + 1, noteTile);
         }
     }
 }
@@ -754,42 +739,56 @@ static void UpdateNotes(void)
 // ---- Input handling ----
 static void HandleInput(void)
 {
-    u8 pressedLane;
-
-    if      (JOY_NEW(DPAD_UP))    pressedLane = LANE_UP;
-    else if (JOY_NEW(DPAD_RIGHT)) pressedLane = LANE_RIGHT;
-    else if (JOY_NEW(DPAD_DOWN))  pressedLane = LANE_DOWN;
-    else if (JOY_NEW(DPAD_LEFT))  pressedLane = LANE_LEFT;
-    else                          return;
-
-    // Find nearest active note in the pressed lane
+    u8 pressedType;
     u32 i;
     s32 bestDelta = 100;
     u32 bestIdx   = MAX_NOTES;
-
-    for (i = 0; i < MAX_NOTES; i++)
-    {
-        if (sRanger->notes[i].state == NOTE_ACTIVE
-         && sRanger->notes[i].lane == pressedLane)
-        {
-            s32 d = sRanger->notes[i].tileCol - HIT_ZONE_COL;
-            if (d < 0) d = -d;
-            if (d < bestDelta) { bestDelta = d; bestIdx = i; }
-        }
-    }
-
+    // Nearest active note of ANY type, separate from the pressed-type search
+    // below - needed to catch "pressed while an Attack icon is at the hit
+    // zone", since Attack notes aren't bound to any one button.
+    s32 nearestAnyDelta = 100;
+    u32 nearestAnyIdx   = MAX_NOTES;
     u8 hitResult;
     bool8 consumeNote = FALSE;
 
-    if (bestIdx < MAX_NOTES && sRanger->notes[bestIdx].kind == NOTE_KIND_ATTACK && bestDelta <= 2)
+    if      (JOY_NEW(DPAD_UP))    pressedType = NOTE_TYPE_UP;
+    else if (JOY_NEW(DPAD_DOWN))  pressedType = NOTE_TYPE_DOWN;
+    else if (JOY_NEW(DPAD_LEFT))  pressedType = NOTE_TYPE_LEFT;
+    else if (JOY_NEW(DPAD_RIGHT)) pressedType = NOTE_TYPE_RIGHT;
+    else if (JOY_NEW(A_BUTTON))   pressedType = NOTE_TYPE_A;
+    else if (JOY_NEW(B_BUTTON))   pressedType = NOTE_TYPE_B;
+    else                          return;
+
+    for (i = 0; i < MAX_NOTES; i++)
+    {
+        if (sRanger->notes[i].state != NOTE_ACTIVE)
+            continue;
+
+        s32 d = sRanger->notes[i].tileCol - HIT_ZONE_COL;
+        if (d < 0) d = -d;
+
+        if (d < nearestAnyDelta)
+        {
+            nearestAnyDelta = d;
+            nearestAnyIdx = i;
+        }
+        if (sRanger->notes[i].type == pressedType && d < bestDelta)
+        {
+            bestDelta = d;
+            bestIdx = i;
+        }
+    }
+
+    if (nearestAnyIdx < MAX_NOTES
+     && sRanger->notes[nearestAnyIdx].type == NOTE_TYPE_ATTACK
+     && nearestAnyDelta <= 2)
     {
         // Pressing into the target's counterattack is backwards - that's on you.
         hitResult = HIT_MISS;
         consumeNote = TRUE;
+        bestIdx = nearestAnyIdx;
         sRanger->missCount++;
-        sRanger->loopProgress -= 25;
-        if (sRanger->loopProgress < 0)
-            sRanger->loopProgress = 0;
+        sRanger->loopProgress = 0;
         PlaySE(SE_BALL_BOUNCE_4);
     }
     else if (bestDelta == 0)
@@ -815,25 +814,24 @@ static void HandleInput(void)
     }
     else
     {
-        // Miss - no nearby note
+        // Miss - no nearby note of this type. Stalls the ring the same way a
+        // through-miss in UpdateNotes does (see there for why loopsCompleted
+        // is untouched).
         hitResult = HIT_MISS;
         sRanger->missCount++;
-        sRanger->loopProgress -= 15;
-        if (sRanger->loopProgress < 0)
-            sRanger->loopProgress = 0;
+        sRanger->loopProgress = 0;
         PlaySE(SE_BALL_BOUNCE_4);
     }
 
-    // Consume the hit note
+    // Consume the hit (or punished) note
     if (consumeNote && bestIdx < MAX_NOTES)
     {
-        u8  row = GetLaneRow(pressedLane);
         s16 col = sRanger->notes[bestIdx].tileCol;
         sRanger->notes[bestIdx].state = NOTE_INACTIVE;
         if (col >= LANE_START_COL && col <= LANE_END_COL)
         {
-            SetTile(col, row,     LaneRestoreTile(col));
-            SetTile(col, row + 1, LaneRestoreTile(col));
+            SetTile(col, REEL_ROW,     ReelRestoreTile(col));
+            SetTile(col, REEL_ROW + 1, ReelRestoreTile(col));
         }
     }
 
