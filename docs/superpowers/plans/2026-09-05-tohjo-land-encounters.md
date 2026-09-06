@@ -375,7 +375,7 @@ def test_merge_is_idempotent():
 
 def test_merge_inserts_a_brand_new_map_entry():
     new_routes = dict(ROUTES)
-    new_routes["MAP_ROUTE1_FRLG"] = {
+    new_routes["MAP_ROUTE1"] = {
         "is_johto": False,
         "base_label_prefix": "gKantoRoute1",
         "day": ROUTES["MAP_ROUTE29_JOHTO"]["day"],
@@ -387,7 +387,7 @@ def test_merge_inserts_a_brand_new_map_entry():
         with open(path) as f:
             result = json.load(f)
         group = next(g for g in result["wild_encounter_groups"] if g["label"] == "gWildMonHeaders")
-        kanto_entries = [e for e in group["encounters"] if e["map"] == "MAP_ROUTE1_FRLG"]
+        kanto_entries = [e for e in group["encounters"] if e["map"] == "MAP_ROUTE1"]
         assert len(kanto_entries) == 4
 ```
 
@@ -557,10 +557,10 @@ Expected: `OK: 0 routes validated`
 
 - [ ] **Step 3: Author Kanto Routes 1-6**
 
-For each of `MAP_ROUTE1_FRLG` through `MAP_ROUTE6_FRLG`, fetch the HGSS grass-encounter data from `https://bulbapedia.bulbagarden.net/wiki/Kanto_Route_N` (N = 1..6) and apply the tier-assignment rule from the Background section above (rank by rate, rank 1-5 → very_common..very_rare, unfilled trailing tiers are open for crossover). `MAP_ROUTE1_FRLG`'s worked example is already given in full in the Background section — add it to `ROUTES` exactly as shown there (as tuples, not the dict form used in the tiers.py tests):
+For each of `MAP_ROUTE1` through `MAP_ROUTE6`, fetch the HGSS grass-encounter data from `https://bulbapedia.bulbagarden.net/wiki/Kanto_Route_N` (N = 1..6) and apply the tier-assignment rule from the Background section above (rank by rate, rank 1-5 → very_common..very_rare, unfilled trailing tiers are open for crossover). `MAP_ROUTE1`'s worked example is already given in full in the Background section — add it to `ROUTES` exactly as shown there (as tuples, not the dict form used in the tiers.py tests):
 
 ```python
-ROUTES["MAP_ROUTE1_FRLG"] = {
+ROUTES["MAP_ROUTE1"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRoute1",
     "day": {
@@ -580,7 +580,7 @@ ROUTES["MAP_ROUTE1_FRLG"] = {
 }
 ```
 
-Repeat the fetch → rank → tier-assign procedure for Routes 2 through 6, using real Bulbapedia data for the native `very_common`/`common`/`uncommon` tiers and your judgment for any open `rare`/`very_rare` crossover slots (Johto species preferred, per the asymmetry rule). Add each as its own `ROUTES["MAP_ROUTEn_FRLG"] = {...}` block, same shape as above.
+Repeat the fetch → rank → tier-assign procedure for Routes 2 through 6, using real Bulbapedia data for the native `very_common`/`common`/`uncommon` tiers and your judgment for any open `rare`/`very_rare` crossover slots (Johto species preferred, per the asymmetry rule). Add each as its own `ROUTES["MAP_ROUTEn"] = {...}` block, same shape as above.
 
 - [ ] **Step 4: Validate**
 
@@ -601,10 +601,10 @@ git commit -m "Author Tohjo land encounters for Kanto Routes 1-6"
 **Files:** Modify: `tools/wild_encounters/tohjo/data.py`
 
 - [ ] **Step 1:** Fetch `https://bulbapedia.bulbagarden.net/wiki/Kanto_Route_N` for N = 7..12. Apply the same tier-assignment rule. Route 7 is where Houndour and Murkrow are natively found (night) per the Background section — place them as native `very_common`/`common`-or-lower tiers there according to their actual listed rates, not as crossover (they belong here). Route 16 is Murkrow's other native route — same treatment.
-- [ ] **Step 2:** Add each using this shape (same as Task 3's `MAP_ROUTE1_FRLG` example — `is_johto` stays `False` for every Kanto route, no level boost applies):
+- [ ] **Step 2:** Add each using this shape (same as Task 3's `MAP_ROUTE1` example — `is_johto` stays `False` for every Kanto route, no level boost applies):
 
 ```python
-ROUTES["MAP_ROUTEn_FRLG"] = {
+ROUTES["MAP_ROUTEn"] = {
     "is_johto": False,
     "base_label_prefix": "gKantoRouteN",
     "day": {
@@ -653,9 +653,9 @@ git commit -m "Author Tohjo land encounters for Kanto Routes 13-18"
 
 **Files:** Modify: `tools/wild_encounters/tohjo/data.py`
 
-- [ ] **Step 1:** Fetch `https://bulbapedia.bulbagarden.net/wiki/Kanto_Route_N` for N = 19, 20, 22, 23, plus the specific Route 21 North/South pages (search Bulbapedia for "Kanto Route 21" if a single page covers both halves — split its data sensibly between `MAP_ROUTE21_NORTH_FRLG` and `MAP_ROUTE21_SOUTH_FRLG`). These routes run along Cinnabar Island's approach.
+- [ ] **Step 1:** Fetch `https://bulbapedia.bulbagarden.net/wiki/Kanto_Route_N` for N = 19, 20, 22, 23, plus the specific Route 21 North/South pages (search Bulbapedia for "Kanto Route 21" if a single page covers both halves — split its data sensibly between `MAP_ROUTE21_NORTH` and `MAP_ROUTE21_SOUTH`). These routes run along Cinnabar Island's approach.
 - [ ] **Step 2:** Slugma is not a valid native pick here (verified: HGSS never puts it in the wild) — do NOT add it in this task. It belongs near Mahogany Town in Johto (Task 10), not Kanto.
-- [ ] **Step 3:** Add each as `ROUTES["MAP_ROUTEn_FRLG"]` (map IDs: `MAP_ROUTE19_FRLG`, `MAP_ROUTE20_FRLG`, `MAP_ROUTE21_NORTH_FRLG`, `MAP_ROUTE21_SOUTH_FRLG`, `MAP_ROUTE22_FRLG`, `MAP_ROUTE23_FRLG`).
+- [ ] **Step 3:** Add each as `ROUTES["MAP_ROUTEn"]` (map IDs: `MAP_ROUTE19`, `MAP_ROUTE20`, `MAP_ROUTE21_NORTH`, `MAP_ROUTE21_SOUTH`, `MAP_ROUTE22`, `MAP_ROUTE23`).
 - [ ] **Step 4:** Run: `python3 validate_data.py` — Expected: `OK: 24 routes validated`
 - [ ] **Step 5: Commit**
 
@@ -670,7 +670,7 @@ git commit -m "Author Tohjo land encounters for Kanto Route 19-23 (incl. Route 2
 
 **Files:** Modify: `tools/wild_encounters/tohjo/data.py`
 
-- [ ] **Step 1:** Fetch `https://bulbapedia.bulbagarden.net/wiki/Kanto_Route_24` and `_25`. Add as `MAP_ROUTE24_FRLG`, `MAP_ROUTE25_FRLG`.
+- [ ] **Step 1:** Fetch `https://bulbapedia.bulbagarden.net/wiki/Kanto_Route_24` and `_25`. Add as `MAP_ROUTE24`, `MAP_ROUTE25`.
 - [ ] **Step 2:** Fetch `https://bulbapedia.bulbagarden.net/wiki/Route_26` through `Route_29` (Johto — no prefix needed, verified unambiguous). `Route_29`'s data is already given in full in the Background section as the worked example — use it directly (with `is_johto: True` so the level boost applies):
 
 ```python
