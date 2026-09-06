@@ -199,6 +199,7 @@ static void RangerCapture_VBlankCB(void);
 static void RangerCapture_MainCB(void);
 static void Task_RangerCapture(u8 taskId);
 static void SpriteCB_CaptureRing(struct Sprite *sprite);
+static void CheckLoopExhaustion(bool8 justMissed);
 
 // ---- Inline solid-color tile generator ----
 // 4bpp: each byte holds 2 pixels. For color c, byte = c | (c << 4).
@@ -712,6 +713,7 @@ static void UpdateNotes(void)
                 if (sRanger->loopProgress > LOOP_PROGRESS_MAX)
                     sRanger->loopProgress = LOOP_PROGRESS_MAX;
                 UpdateLoopMeter();
+                CheckLoopExhaustion(FALSE);
             }
             else
             {
@@ -724,6 +726,7 @@ static void UpdateNotes(void)
                 sRanger->feedbackTimer = FEEDBACK_DURATION;
                 UpdateLoopMeter();
                 PlaySE(SE_BALL_BOUNCE_4);
+                CheckLoopExhaustion(TRUE);
             }
         }
         else
@@ -734,6 +737,68 @@ static void UpdateNotes(void)
             SetTile(col, REEL_ROW + 1, noteTile);
         }
     }
+}
+
+// True once every note this loop has been spawned and none is still active
+// (all consumed, missed-through, or let-through-safely) - i.e. this loop has
+// nothing left to give.
+static bool8 LoopNotesExhausted(void)
+{
+    u32 i;
+
+    if (sRanger->notesSpawnedThisLoop < NOTES_PER_LOOP_TOTAL)
+        return FALSE;
+
+    for (i = 0; i < MAX_NOTES; i++)
+    {
+        if (sRanger->notes[i].state == NOTE_ACTIVE)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+// Call this immediately after any event that may have just deactivated the
+// loop's last active note (a scored hit, an Attack-punish, a through-miss,
+// or an Attack note safely let through) - i.e. right at the source of each
+// possible transition, not deferred to a later frame. Deferring this check
+// caused a real double-count bug: if the note that emptied the budget was
+// itself a genuine miss, that miss's own missCount++ had already happened
+// on an earlier frame boundary, so a later, separate "is the loop dead"
+// check couldn't tell it had already been paid for and counted it again.
+// Checking at the source instead means there is never a gap for that to
+// happen in.
+//
+// A loop that used up all its notes without reaching LOOP_PROGRESS_MAX
+// (e.g. an unlucky draw with many Attack notes, which are worth much less
+// than a real hit) would otherwise neither complete nor fail - no more
+// notes ever spawn once notesSpawnedThisLoop hits its cap, so nothing
+// would move missCount toward maxMisses or loopProgress toward
+// LOOP_PROGRESS_MAX again. `justMissed` says whether the event that just
+// triggered this call was already a miss in its own right (through-miss,
+// Attack-punish, no-match-miss): if so, its own missCount++ already
+// accounts for this loop's chance being spent, so this only needs to reset
+// the per-loop bookkeeping for a fresh attempt, not add a second strike.
+// If the triggering event wasn't itself a miss (a scored hit, or an Attack
+// note let through safely) but the loop still came up short, that's a new
+// mistake in its own right and does cost a strike.
+static void CheckLoopExhaustion(bool8 justMissed)
+{
+    if (sRanger->loopProgress >= LOOP_PROGRESS_MAX)
+        return;
+    if (!LoopNotesExhausted())
+        return;
+
+    if (!justMissed)
+    {
+        sRanger->missCount++;
+        PrintFeedback(HIT_MISS);
+        sRanger->feedbackTimer = FEEDBACK_DURATION;
+        PlaySE(SE_BALL_BOUNCE_4);
+    }
+    sRanger->loopProgress = 0;
+    sRanger->notesSpawnedThisLoop = 0;
+    sRanger->noteSpawnTimer = 0;
+    UpdateLoopMeter();
 }
 
 // ---- Input handling ----
@@ -865,6 +930,7 @@ static void HandleInput(void)
     PrintFeedback(hitResult);
     sRanger->feedbackTimer = FEEDBACK_DURATION;
     UpdateLoopMeter();
+    CheckLoopExhaustion(hitResult == HIT_MISS);
 }
 
 // ---- State handlers ----
