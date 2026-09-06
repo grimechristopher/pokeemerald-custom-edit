@@ -909,6 +909,20 @@ static void DoSetupGfx(void)
         LoadSpritePalette(&ringPalette);
     }
     sRanger->ringSpriteId = CreateSprite(&sRingSpriteTemplate, 152, 56, 0);
+    // The dummy one-frame sRingAffineAnimCmds table (needed only so CreateSprite
+    // allocates an OAM affine matrix) reaches AFFINEANIMCMD_END on its very first
+    // tick, and the sprite-affine-anim system then re-executes that end command
+    // every subsequent frame (ContinueAffineAnim -> AffineAnimCmd_end), each time
+    // recomputing and overwriting the matrix from its own cached (identity)
+    // scale state - silently clobbering whatever SpriteCB_CaptureRing just wrote
+    // one call earlier in the same frame (AnimateSprites runs the sprite's own
+    // callback first, then this stock stepper). Pausing the stepper is the
+    // established pattern in this codebase for a sprite whose matrix is meant
+    // to be fully hand-driven (see e.g. battle_anim_dragon.c, battle_anim_water.c,
+    // battle_anim_mons.c) - it leaves BeginAffineAnim's one-time initial write
+    // alone but makes ContinueAffineAnim a no-op every frame after, so the ring's
+    // scale is solely whatever SpriteCB_CaptureRing computes.
+    gSprites[sRanger->ringSpriteId].affineAnimPaused = TRUE;
 
     sRanger->targetSpriteId = CreateObjectGraphicsSprite(
         sRanger->targetSpecies + OBJ_EVENT_MON,
