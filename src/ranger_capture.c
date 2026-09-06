@@ -795,21 +795,45 @@ static void HandleInput(void)
     {
         hitResult = HIT_PERFECT;
         consumeNote = TRUE;
-        sRanger->loopProgress += 8;
+        // 14, not the original 8 - headless-capture testing found that with
+        // NOTES_PER_LOOP_TOTAL capped at 12 and the old +8/+5/+2 award scale,
+        // even flawless play (every non-Attack note hit Perfect, every Attack
+        // note correctly let through) could only reach the high 70s-90s, never
+        // LOOP_PROGRESS_MAX (100) - the loop was mathematically unwinnable
+        // once its 12 notes ran out, regardless of skill (12 notes * the old
+        // +8 ceiling is 96 even in the best case of zero Attack notes; real
+        // Attack draws only make it worse, since letting one through nets just
+        // +3). Scaled the three award values up (roughly 3:2:1, same relative
+        // spread as before) so a loop actually completes on flawless play at
+        // this screen's easiest and mid tiers with real margin, and at the
+        // Beedrill-tier difficulty this branch's own test script exercises
+        // (attackNoteChance 30) even on an above-average-unlucky draw (5 of 12
+        // notes rolling Attack) - confirmed via a scripted flawless-play run
+        // actually reaching LOOP_PROGRESS_MAX and triggering the success path.
+        // The hardest tier (attackNoteChance 40) can still fall a little short
+        // on a bad draw (many Attack notes in one loop) even with flawless
+        // play, since Attack notes are worth much less than a real hit -
+        // that's a deeper balance question (e.g. rebalancing attackNoteChance
+        // itself, or NOTES_PER_LOOP_TOTAL) left for a follow-up rather than
+        // guessed at here. These award values are pre-existing from Phase 1
+        // (unchanged by this branch's single-reel rewrite) and unrelated to
+        // ComputeRangerCaptureDifficulty, so the difficulty-tier unit tests
+        // are unaffected.
+        sRanger->loopProgress += 14;
         PlaySE(SE_SUCCESS);
     }
     else if (bestDelta == 1)
     {
         hitResult = HIT_GOOD;
         consumeNote = TRUE;
-        sRanger->loopProgress += 5;
+        sRanger->loopProgress += 9;
         PlaySE(SE_SELECT);
     }
     else if (bestDelta == 2)
     {
         hitResult = HIT_OK;
         consumeNote = TRUE;
-        sRanger->loopProgress += 2;
+        sRanger->loopProgress += 5;
         PlaySE(SE_SELECT);
     }
     else
